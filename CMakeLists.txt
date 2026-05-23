@@ -75,6 +75,7 @@ target_link_libraries(imgui PUBLIC
 # =========================================
 
 # add_subdirectory(src/Módulo)
+add_subdirectory(src/NES)
 
 
 # =========================================
@@ -94,6 +95,7 @@ target_link_libraries(TT PRIVATE
     imgui
     glad
     OpenGL::GL
+    NES
 )
 
 # =========================================
