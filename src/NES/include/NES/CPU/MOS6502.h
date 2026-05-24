@@ -2,6 +2,7 @@
 
 #include <NES/CPU/StatusRegister.h>
 #include <NES/CPU/ALU.h>
+#include <NES/Bus/Bus.h>
 
 namespace NES::CPU
 {
@@ -15,6 +16,8 @@ namespace NES::CPU
 
             uint64_t getCycles();
 
+            void connectBus(Bus *b);
+
             void mock();
         private:
             uint8_t A;
@@ -25,6 +28,8 @@ namespace NES::CPU
             StatusRegister status;
             
             ALU alu;
+
+            NES::Bus* bus = nullptr;
 
             uint64_t cycles;
     };

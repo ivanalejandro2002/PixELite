@@ -3,9 +3,11 @@
 
 int main()
 {
-    NES::CPU::MOS6502 cpu;
+    NES::NES nes;
 
-    cpu.mock();
+    
+
+    nes.mock();
 
     return 0;
 }
