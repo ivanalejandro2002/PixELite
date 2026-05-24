@@ -1,4 +1,5 @@
 #include <NES/CPU/MOS6502.h>
+#include <NES/Bus/Bus.h>
 #include <iostream>
 
 namespace NES::CPU
@@ -10,6 +11,11 @@ namespace NES::CPU
 
         status.setFlag(StatusRegister::FlagID::I, true);
         status.setFlag(StatusRegister::FlagID::U, true);
+    }
+
+    void MOS6502::connectBus(Bus *b)
+    {
+        bus = b;
     }
 
     void MOS6502::clock()
@@ -279,5 +285,17 @@ namespace NES::CPU
         std::cout << "CMP(255, 0) =" << (int)result.result << "\n";
         status.applyMask(result.statusBits, result.statusChangedBits);
         std::cout << (int)status.getByte() << "\n";
+
+
+        //-----Lectura y Escritura-----
+
+        uint8_t s = bus->read(0x1FFF);
+        std::cout << "VALOR ORIGINAL EN: 0X1FFF: " << (int)s << "\n";
+
+        bus->write(0x17FF, 99);
+
+        s = bus->read(0x0FFF);
+
+        std::cout << "VALOR FINAL MAPEADO EN: 0X0FFF: " << (int)s << "\n";
     }
 }
