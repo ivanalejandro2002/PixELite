@@ -36,10 +36,7 @@ namespace NES
             uint8_t read(uint16_t addr);
             void write(uint16_t addr, uint8_t value);
 
-            void addBusMask(uint16_t start, uint16_t end, uint8_t andMask, uint8_t orMask);
             void resetMasks();
-
-            uint16_t normalizeAddress();
 
             void addDevice(Device *device);
 
