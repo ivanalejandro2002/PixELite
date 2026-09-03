@@ -19,3 +19,11 @@ wayland-protocols \
 libegl1-mesa-dev \
 libgl1-mesa-dev
 ```
+
+# Clonación del repositorio
+
+Para clonar el resposiorio es necesario seguir una serie de pasos importantes, esto debido a submódulos externos a este proyecto, los cuales son imgui y SDL3.
+* git clone --recursive <liga del repositorio>
+* cmake -B build
+* cmake --build build
+* ./build/TT

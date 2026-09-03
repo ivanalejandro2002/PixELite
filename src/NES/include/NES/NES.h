@@ -6,6 +6,7 @@
 #include <NES/Bus/Bus.h>
 
 #include <NES/Memory/RAM.h>
+#include <NES/Memory/PRGROM.h>
 
 namespace NES
 {
@@ -19,10 +20,15 @@ namespace NES
             void reset();
 
             void mock();
+
         private:
+            static std::vector<uint8_t> createTestProgram();
+
+            RAM ram;
+            PRGROM prgRom;
+            
             Bus mainBus;
             CPU::MOS6502 cpu;
-            RAM ram;
 
             uint64_t masterClock = 0;
     };
