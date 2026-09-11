@@ -1,6 +1,7 @@
 #include <NES/CPU/MOS6502.h>
 #include <NES/Bus/Bus.h>
 #include <iostream>
+#include <cassert>
 
 namespace NES::CPU
 {
@@ -8,6 +9,9 @@ namespace NES::CPU
     MOS6502::MOS6502()
     {
         cycles = 0;
+        PC = 0xFFFC;
+        S = 0xFD;
+        isJammed = 0;
 
         status.setFlag(StatusRegister::FlagID::I, true);
         status.setFlag(StatusRegister::FlagID::U, true);
@@ -26,11 +30,38 @@ namespace NES::CPU
     void MOS6502::reset()
     {
         cycles = 0;
+        PC = 0xFFFC;
+        if(S < 3)S = 0xFF - 3;
+        else S -= 3;
+        isJammed = 0;
+
+        status.setFlag(StatusRegister::FlagID::I, true);
     }
 
     uint64_t MOS6502::getCycles()
     {
         return cycles;
+    }
+
+    void MOS6502::finishInstruction()
+    {
+        if(currentInstruction.has_value())
+            currentInstruction->endTask();
+    }
+
+    void MOS6502::incrementPC()
+    {
+        PC = static_cast<uint16_t>(PC + 1);
+    }
+
+    void MOS6502::decrementS()
+    {
+        S = static_cast<uint8_t>(S - 1);
+    }
+
+    void MOS6502::incrementS()
+    {
+        S = static_cast<uint8_t>(S + 1);
     }
 
     void MOS6502::execute(MicroOperation operation)
@@ -41,8 +72,43 @@ namespace NES::CPU
                 fetchOpcode();
                 break;
 
+            case MicroOperation::FetchOpcodeAndDiscard:
+                fetchOpcodeAndDiscard();
+                break;
+
+            case MicroOperation::FetchOpcodeDiscardAndExec:
+                fetchOpcodeDiscardAndExec();
+                break;
+
+            case MicroOperation::DummyRead:
+                dummyRead();
+                break;
+            
+            case MicroOperation::DummyWrite:
+                dummyWrite();
+
             case MicroOperation::FetchOperand:
                 fetchOperand();
+                break;
+            
+            case MicroOperation::ReadOperand:
+                readOperand();
+                break;
+
+            case MicroOperation::WriteOperand:
+                writeOperand();
+                break;
+            
+            case MicroOperation::ReadOperandAndExecute:
+                readOperandAndExecute();
+                break;
+            
+            case MicroOperation::ReadOperandVariable:
+                readOperandVariable();
+                break;
+
+            case MicroOperation::FetchZeroPageAddress:
+                fetchZeroPageAddress();
                 break;
 
             case MicroOperation::FetchAddressLow:
@@ -53,8 +119,16 @@ namespace NES::CPU
                 fetchAddressHigh();
                 break;
 
-            case MicroOperation::FetchZeroPageAddress:
-                fetchZeroPageAddress();
+            case MicroOperation::FetchAddressHighExecute:
+                fetchAddresshighExecute();
+                break;
+
+            case MicroOperation::FetchAddressHighAddX:
+                fetchAddressHighAddX();
+                break;
+
+            case MicroOperation::FetchAddressHighAddY:
+                fetchAddressHighAddY();
                 break;
             
             case MicroOperation::FetchIndirectLow:
@@ -65,24 +139,12 @@ namespace NES::CPU
                 fetchIndirectHigh();
                 break;
 
-            case MicroOperation::ReadOperand:
-                readOperand();
+            case MicroOperation::FetchIndirectHighAddY:
+                fetchIndirectHighAddY();
                 break;
-
-            case MicroOperation::WriteOperand:
-                writeOperand();
-                break;
-
-            case MicroOperation::DummyRead:
-                dummyRead();
-                break;
-
-            case MicroOperation::AddXToAddress:
-                addXToAddress();
-                break;
-
-            case MicroOperation::AddYToAddress:
-                addYToAddress();
+            
+            case MicroOperation::FetchIndirectHighExecute:
+                fetchIndirectHighExecute();
                 break;
 
             case MicroOperation::AddXToZeroPageAddress:
@@ -93,12 +155,64 @@ namespace NES::CPU
                 addYToZeroPageAddress();
                 break;
             
-            case MicroOperation::Execute:
-                execute();
+            case MicroOperation::FetchBranch:
+                fetchBranch();
                 break;
 
             case MicroOperation::EvaluateBranch:
                 evaluateBranch();
+                break;
+
+            case MicroOperation::DummyBranchPageCrossRead:
+                dummyBranchPageCrossRead();
+                break;
+
+            case MicroOperation::PushStatus:
+                pushStatus();
+                break;
+
+            case MicroOperation::PushPCHigh:
+                pushPCHigh();
+                break;
+
+            case MicroOperation::PushPCLow:
+                pushPCLow();
+                break;
+            
+            case MicroOperation::PushAccumulator:
+                pushAccumulator();
+                break;
+            
+            case MicroOperation::PushStatusBRK:
+                pushStatusBRK();
+                break;
+            
+            case MicroOperation::PullStatus:
+                pullstatus();
+                break;
+
+            case MicroOperation::PullPCLow:
+                pullPCLow();
+                break;
+
+            case MicroOperation::PullPCHigh:
+                pullPCHigh();
+                break;
+            
+            case MicroOperation::PullAccumulator:
+                pullAccumulator();
+                break;
+
+            case MicroOperation::PullStatusBRK:
+                PullStatusBRK();
+                break;
+
+            case MicroOperation::FetchAddressHighToPC:
+                fetchAddressHighToPC();
+                break;
+
+            case MicroOperation::StackPop:
+                stackPop();
                 break;
 
             default:
@@ -112,6 +226,7 @@ namespace NES::CPU
         {
             return;
         }
+
         switch(currentInstruction->getOperation())
         {
             case InstructionOperation::LDA:
@@ -283,40 +398,9 @@ namespace NES::CPU
             case InstructionOperation::JMP:
                 executeJMP();
                 break;
-
-            case InstructionOperation::JSR:
-                executeJSR();
-                break;
-
-            case InstructionOperation::RTS:
-                executeRTS();
-                break;
-
-            case InstructionOperation::BRK:
-                executeBRK();
-                break;
-
-            case InstructionOperation::RTI:
-                executeRTI();
-                break;
+                
 
 
-
-            case InstructionOperation::PHA:
-                executePHA();
-                break;
-
-            case InstructionOperation::PLA:
-                executePLA();
-                break;
-
-            case InstructionOperation::PHP:
-                executePHP();
-                break;
-
-            case InstructionOperation::PLP:
-                executePLP();
-                break;
 
             case InstructionOperation::TXS:
                 executeTXS();
@@ -461,75 +545,459 @@ namespace NES::CPU
 
     void MOS6502::fetchOpcode()
     {
-
+        opcode = bus->read(PC);
+        incrementPC();
     }
+
+    void MOS6502::fetchOpcodeAndDiscard()
+    {
+        data = bus->read(PC);
+    }
+
+    void MOS6502::fetchOpcodeDiscardAndExec()
+    {
+        opcode = bus->read(PC);
+        executeInstruction();
+    }
+
+    void MOS6502::dummyRead()
+    {
+        uint16_t dummyAddress = 
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
+
+        data = bus -> read(dummyAddress);
+        // Es importante conservarlo para instrucciones como AHX
+        // addressHigh = static_cast<uint8_t> (address >> 8);
+    }
+
+    void MOS6502::dummyWrite()
+    {
+        bus->write(address, data);
+    }
+
     void MOS6502::fetchOperand()
     {
-
+        data = bus->read(PC);
+        incrementPC();
+        
+        executeInstruction();
     }
-    
-    void MOS6502::fetchAddressLow()
-    {
 
-    }
-    void MOS6502::fetchAddressHigh()
+    void MOS6502::readOperand()
     {
+        data = bus -> read(address);
+    }
+
+    void MOS6502::writeOperand()
+    {
+        executeInstruction();
+    }
+
+    void MOS6502::readOperandAndExecute()
+    {
+        data = bus -> read(address);
+
+        executeInstruction();
+    }
+
+    void MOS6502::readOperandVariable()
+    {
+        uint16_t speculativeAddress =
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
+        
+        data = bus->read(speculativeAddress);
+
+        if(address == speculativeAddress)
+        {
+            executeInstruction();
+            return;
+        }
+
+        addressHigh = static_cast<uint8_t>(addressHigh >> 8);
+        currentInstruction->insertNext(MicroOperation::ReadOperandAndExecute);
 
     }
 
     void MOS6502::fetchZeroPageAddress()
     {
+        addressHigh = 0;
+        addressLow = bus -> read(PC);
+        incrementPC();
 
+        address = static_cast<uint16_t>(addressLow);
+    }
+    
+    void MOS6502::fetchAddressLow()
+    {
+        addressLow = bus -> read(PC);
+        incrementPC();
+
+        address =
+            static_cast<uint16_t>(
+                (address & 0xFF00) |
+                static_cast<uint8_t>(address + 1)
+            );
+    }
+    void MOS6502::fetchAddressHigh()
+    {
+        addressHigh = bus -> read(PC);
+        incrementPC();
+
+        address =
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
+    }
+
+    void MOS6502::fetchAddresshighExecute()
+    {
+        addressHigh = bus -> read(PC);
+        incrementPC();
+
+        address =
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
+        
+        executeInstruction();
+    }
+
+    void MOS6502::fetchAddressHighAddX()
+    {
+        fetchAddressHigh();
+
+        uint16_t lowerSum =
+            static_cast<uint16_t>(addressLow) +
+            static_cast<uint16_t>(X);
+
+        bool pageCrossed = (lowerSum & 0x100) != 0;
+
+        addressLow = static_cast<uint8_t>(lowerSum & 0xFF);
+
+        address =
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh + pageCrossed) << 8);
+    }
+
+    void MOS6502::fetchAddressHighAddY()
+    {
+        fetchAddressHigh();
+
+        uint16_t lowerSum =
+            static_cast<uint16_t>(addressLow) +
+            static_cast<uint16_t>(Y);
+
+        bool pageCrossed = (lowerSum & 0x100) != 0;
+
+        addressLow = static_cast<uint8_t>(lowerSum & 0xFF);
+
+        address =
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh + pageCrossed) << 8);
     }
 
     void MOS6502::fetchIndirectLow()
     {
+        addressLow = bus->read(address);
 
+        address =
+            static_cast<uint16_t>(
+                (address & 0xFF00) |
+                static_cast<uint8_t>(address + 1)
+            );
     }
+    
     void MOS6502::fetchIndirectHigh()
     {
-
+        addressHigh = bus -> read(address);
+        
+        address =
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
     }
 
-    void MOS6502::addXToAddress()
+    void MOS6502::fetchIndirectHighAddY()
     {
+        fetchIndirectHigh();
 
+        uint16_t lowerSum =
+            static_cast<uint16_t>(addressLow) +
+            static_cast<uint16_t>(Y);
+
+        bool pageCrossed = (lowerSum & 0x100) != 0;
+
+        addressLow = static_cast<uint8_t>(lowerSum & 0xFF);
+
+        address =
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh + pageCrossed) << 8);
     }
-    void MOS6502::addYToAddress()
-    {
 
+    void MOS6502::fetchIndirectHighExecute()
+    {
+        fetchIndirectHigh();
+        executeInstruction();
+    }
+
+    void MOS6502::addZeroPageAddress(uint8_t index)
+    {
+        addressLow =
+            static_cast<uint8_t>(addressLow + index);
+
+        addressHigh = 0x00;
+
+        address =
+            static_cast<uint16_t>(addressLow);
     }
 
     void MOS6502::addXToZeroPageAddress()
     {
-
+        addZeroPageAddress(X);
     }
     void MOS6502::addYToZeroPageAddress()
     {
-
+        addZeroPageAddress(Y);
     }
 
-    void MOS6502::readOperand()
+    void MOS6502::fetchBranch()
     {
+        data = bus->read(PC);
+        incrementPC();
 
+        address = PC;
+
+        addressHigh = static_cast<uint8_t>(PC >> 8);
+        addressLow = static_cast<uint8_t>(PC & 0x00FF);
+
+        executeInstruction();
     }
-    void MOS6502::writeOperand()
-    {
 
-    }
-
-    void MOS6502::dummyRead()
-    {
-
-    }
-
-    void MOS6502::execute()
-    {
-
-    }
     void MOS6502::evaluateBranch()
     {
 
+        int16_t offset = static_cast<int8_t>(data);
+
+        uint16_t target =
+            static_cast<uint16_t>(PC + offset);
+
+        bool pageCrossed =
+            (target & 0xFF00) != (PC & 0xFF00);
+
+        address = target;
+
+        // Primer ciclo adicional: dummy read del PC actual.
+        data = bus->read(PC);
+
+        if (!pageCrossed)
+        {
+            PC = target;
+            return;
+        }
+
+        addressHigh = static_cast<uint8_t>(target >> 8);
+        addressLow  = static_cast<uint8_t>(target & 0xFF);
+
+        currentInstruction->insertNext(
+            MicroOperation::DummyBranchPageCrossRead
+        );
+    }
+
+    void MOS6502::dummyBranchPageCrossRead()
+    {
+        PC = address;
+        data = bus->read(address);
+    }
+
+    void MOS6502::pushStatus()
+    {
+        uint16_t stackAddress =
+            static_cast<uint16_t>(
+                0x0100 | 
+                static_cast<uint16_t>(S)
+            );
+
+        StatusRegister pushReg;
+        pushReg.setByte(status.getByte());
+
+        pushReg.setFlag(StatusRegister::B, 1);
+        pushReg.setFlag(StatusRegister::U, 1);
+        
+        bus->write(stackAddress, pushReg.getByte());
+        decrementS();
+    }
+
+    void MOS6502::pushPCHigh()
+    {
+        uint16_t stackAddress =
+            static_cast<uint16_t>(
+                0x0100 | 
+                static_cast<uint16_t>(S)
+            );
+        
+        uint8_t pushData =
+            static_cast<uint8_t>(PC >> 8);
+        
+
+        bus->write(stackAddress, pushData);
+        decrementS();
+    }
+
+    void MOS6502::pushPCLow()
+    {
+        uint16_t stackAddress =
+            static_cast<uint16_t>(
+                0x0100 | 
+                static_cast<uint16_t>(S)
+            );
+        
+        uint8_t pushData =
+            static_cast<uint8_t>(PC & 0x00FF);
+        
+
+        bus->write(stackAddress, pushData);
+        decrementS();
+    }
+
+    void MOS6502::pushAccumulator()
+    {
+        uint16_t stackAddress =
+            static_cast<uint16_t>(
+                0x0100 | 
+                static_cast<uint16_t>(S)
+            );
+
+        bus->write(stackAddress, A);
+        decrementS();
+    }
+
+    void MOS6502::pushStatusBRK()
+    {
+        StatusRegister pushReg;
+        pushReg.setByte(status.getByte());
+
+        pushReg.setFlag(StatusRegister::B, 1);
+        pushReg.setFlag(StatusRegister::U, 1);
+
+        uint16_t stackAddress =
+            static_cast<uint16_t>(
+                0x0100 | 
+                static_cast<uint16_t>(S)
+            );
+        
+        bus->write(stackAddress,pushReg.getByte());
+        decrementS();
+
+        status.setFlag(StatusRegister::I, 1);
+    }
+
+    void MOS6502::pullstatus()
+    {
+        uint16_t stackAddress =
+            static_cast<uint16_t>(
+                0x0100 | 
+                static_cast<uint16_t>(S)
+            );
+
+        StatusRegister pullReg;
+        pullReg.setByte(bus->read(stackAddress));
+
+        pullReg.setFlag(
+            StatusRegister::B,
+            status.getFlag(StatusRegister::B)
+        );
+
+        pullReg.setFlag(
+            StatusRegister::U,
+            status.getFlag(StatusRegister::U)
+        );
+
+        status.setByte(pullReg.getByte());
+    }
+
+    void MOS6502::pullPCLow()
+    {
+        uint16_t stackAddress =
+            static_cast<uint16_t>(
+                0x0100 | 
+                static_cast<uint16_t>(S)
+            );
+
+        addressLow = bus->read(stackAddress);
+
+        incrementS();
+    }
+    
+    void MOS6502::pullPCHigh()
+    {
+        uint16_t stackAddress =
+            static_cast<uint16_t>(
+                0x0100 | 
+                static_cast<uint16_t>(S)
+            );
+
+        addressHigh = bus->read(stackAddress);
+        
+        address =
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
+        
+        PC = address;
+    }
+
+    void MOS6502::pullAccumulator()
+    {
+        uint16_t stackAddress =
+            static_cast<uint16_t>(
+                0x0100 | 
+                static_cast<uint16_t>(S)
+            );
+
+        A = bus->read(stackAddress);
+        status.setFlag(StatusRegister::Z, A == 0);
+        status.setFlag(StatusRegister::N, (A & 0x80) != 0);
+    }
+
+    void MOS6502::PullStatusBRK()
+    {
+        uint16_t stackAddress =
+            static_cast<uint16_t>(
+                0x0100 | 
+                static_cast<uint16_t>(S)
+            );
+
+        StatusRegister pullReg;
+        pullReg.setByte(bus->read(stackAddress));
+
+        pullReg.setFlag(
+            StatusRegister::B,
+            status.getFlag(StatusRegister::B)
+        );
+
+        pullReg.setFlag(
+            StatusRegister::U,
+            status.getFlag(StatusRegister::U)
+        );
+
+        pullReg.setFlag(StatusRegister::I, 0);
+
+        status.setByte(pullReg.getByte());
+    }
+
+    void MOS6502::fetchAddressHighToPC()
+    {
+        addressHigh = bus->read(PC);
+        incrementPC();
+        
+        address =
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
+        
+        PC = address;
+    }
+
+    void MOS6502::stackPop()
+    {
+        incrementS();
     }
 
     // Instrucciones
@@ -538,233 +1006,307 @@ namespace NES::CPU
 
     void MOS6502::executeLDA()
     {
-
+        A = data;
+        status.setFlag(StatusRegister::Z, (data == 0));
+        status.setFlag(StatusRegister::N, (data & (1<<7)) != 0);
     }
     void MOS6502::executeLDX()
     {
-
+        X = data;
+        status.setFlag(StatusRegister::Z, (data == 0));
+        status.setFlag(StatusRegister::N, (data & (1<<7)) != 0);
     }
     void MOS6502::executeLDY()
     {
-
+        Y = data;
+        status.setFlag(StatusRegister::Z, (data == 0));
+        status.setFlag(StatusRegister::N, (data & (1<<7)) != 0);
     }
     
     void MOS6502::executeSTA()
     {
-
+        bus -> write(address, A);
     }
     void MOS6502::executeSTX()
     {
-
+        bus -> write(address, X);
     }
     void MOS6502::executeSTY()
     {
-
+        bus -> write(address, Y);
     }
     
     void MOS6502::executeTAX()
     {
-
+        X = A;
     }
     void MOS6502::executeTAY()
     {
-
+        Y = A;
     }
     void MOS6502::executeTXA()
     {
-
+        A = X;
     }
     void MOS6502::executeTYA()
     {
-
+        A = Y;
     }
 
     void MOS6502::executeADC()
     {
-
+        ALUResult result = alu.add(A, data, status.getFlag(StatusRegister::C));
+        data = A = result.result;
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     void MOS6502::executeSBC()
     {
-
+        ALUResult result = alu.substract(A, data, status.getFlag(StatusRegister::C));
+        data = A = result.result;
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     void MOS6502::executeINC()
     {
-
+        ALUResult result = alu.increment(data);
+        data = result.result;
+        bus -> write(address, result.result);
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     void MOS6502::executeDEC()
     {
-
+        ALUResult result = alu.decrement(data);
+        data = result.result;
+        bus -> write(address, result.result);
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     void MOS6502::executeINX()
     {
-
+        ALUResult result = alu.increment(X);
+        X = result.result;
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     void MOS6502::executeDEX()
     {
-
+        ALUResult result = alu.decrement(X);
+        X = result.result;
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     void MOS6502::executeINY()
     {
-
+        ALUResult result = alu.increment(Y);
+        Y = result.result;
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     void MOS6502::executeDEY()
     {
-
+        ALUResult result = alu.decrement(Y);
+        Y = result.result;
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
 
     void MOS6502::executeASL()
     {
-
+        if(currentInstruction->getAddressingMode() == AddressingMode::Accumulator)
+        {
+            ALUResult result = alu.shiftLeft(A);
+            data = A = result.result;
+            status.applyMask(result.statusBits, result.statusChangedBits);
+        }
+        else
+        {
+            ALUResult result = alu.shiftLeft(data);
+            data = result.result;
+            bus -> write(address, result.result);
+            status.applyMask(result.statusBits, result.statusChangedBits);
+        }
     }
     void MOS6502::executeLSR()
     {
-
+        if(currentInstruction->getAddressingMode() == AddressingMode::Accumulator)
+        {
+            ALUResult result = alu.shiftRight(A);
+            data = A = result.result;
+            status.applyMask(result.statusBits, result.statusChangedBits);
+        }
+        else
+        {
+            ALUResult result = alu.shiftRight(data);
+            data = result.result;
+            bus -> write(address, result.result);
+            status.applyMask(result.statusBits, result.statusChangedBits);
+        }
     }
     void MOS6502::executeROL()
     {
-
+        if(currentInstruction->getAddressingMode() == AddressingMode::Accumulator)
+        {
+            ALUResult result = alu.rotateLeft(A, status.getFlag(StatusRegister::C));
+            data = A = result.result;
+            status.applyMask(result.statusBits, result.statusChangedBits);
+        }
+        else
+        {
+            ALUResult result = alu.rotateLeft(data, status.getFlag(StatusRegister::C));
+            data = result.result;
+            bus -> write(address, result.result);
+            status.applyMask(result.statusBits, result.statusChangedBits);
+        }
     }
     void MOS6502::executeROR()
     {
-
+        if(currentInstruction->getAddressingMode() == AddressingMode::Accumulator)
+        {
+            ALUResult result = alu.rotateRight(A, status.getFlag(StatusRegister::C));
+            data = A = result.result;
+            status.applyMask(result.statusBits, result.statusChangedBits);
+        }
+        else
+        {
+            ALUResult result = alu.rotateRight(data, status.getFlag(StatusRegister::C));
+            data = result.result;
+            bus -> write(address, result.result);
+            status.applyMask(result.statusBits, result.statusChangedBits);
+        }
     }
     
     void MOS6502::executeAND()
     {
-
+        ALUResult result = alu.andOp(A, data);
+        data = A = result.result;
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     void MOS6502::executeORA()
     {
-
+        ALUResult result = alu.orOp(A, data);
+        data = A = result.result;
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     void MOS6502::executeEOR()
     {
-
+        ALUResult result = alu.xorOp(A, data);
+        data = A = result.result;
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     void MOS6502::executeBIT()
     {
-
+        ALUResult result = alu.bitTest(A, data);
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
 
     void MOS6502::executeCMP()
     {
-
+        ALUResult result = alu.compare(A, data);
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     void MOS6502::executeCPX()
     {
-
+        ALUResult result = alu.compare(X, data);
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     void MOS6502::executeCPY()
     {
-
+        ALUResult result = alu.compare(Y, data);
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     
     void MOS6502::executeBCC()
     {
-
+        if(!status.getFlag(StatusRegister::C))
+            currentInstruction->insertNext(
+                MicroOperation::EvaluateBranch
+            );
     }
     void MOS6502::executeBCS()
     {
-
+        if(status.getFlag(StatusRegister::C))
+            currentInstruction->insertNext(
+                MicroOperation::EvaluateBranch
+            );
     }
     void MOS6502::executeBEQ()
     {
-
+        if(status.getFlag(StatusRegister::Z))
+            currentInstruction->insertNext(
+                MicroOperation::EvaluateBranch
+            );
     }
     void MOS6502::executeBNE()
     {
-
+        if(!status.getFlag(StatusRegister::Z))
+            currentInstruction->insertNext(
+                MicroOperation::EvaluateBranch
+            );
     }
     void MOS6502::executeBPL()
     {
-
+        if(!status.getFlag(StatusRegister::N))
+            currentInstruction->insertNext(
+                MicroOperation::EvaluateBranch
+            );
     }
     void MOS6502::executeBMI()
     {
-
+        if(status.getFlag(StatusRegister::N))
+            currentInstruction->insertNext(
+                MicroOperation::EvaluateBranch
+            );
     }
     void MOS6502::executeBVC()
     {
-
+        if(!status.getFlag(StatusRegister::V))
+            currentInstruction->insertNext(
+                MicroOperation::EvaluateBranch
+            );
     }
     void MOS6502::executeBVS()
     {
-
+        if(status.getFlag(StatusRegister::C))
+            currentInstruction->insertNext(
+                MicroOperation::EvaluateBranch
+            );
     }
 
     void MOS6502::executeJMP()
     {
-
-    }
-    void MOS6502::executeJSR()
-    {
-
-    }
-    void MOS6502::executeRTS()
-    {
-
-    }
-    void MOS6502::executeBRK()
-    {
-
-    }
-    void MOS6502::executeRTI()
-    {
-
+        PC = address;
     }
 
-    void MOS6502::executePHA()
-    {
-
-    }
-    void MOS6502::executePLA()
-    {
-
-    }
-    void MOS6502::executePHP()
-    {
-
-    }
-    void MOS6502::executePLP()
-    {
-
-    }
     void MOS6502::executeTXS()
     {
-
+        S = X;
     }
     void MOS6502::executeTSX()
     {
-
+        X = S;
     }
 
     void MOS6502::executeCLC()
     {
-
+        status.setFlag(StatusRegister::FlagID::C, 0);
     }
     void MOS6502::executeSEC()
     {
-
+        status.setFlag(StatusRegister::FlagID::C, 1);
     }
     void MOS6502::executeCLI()
     {
-
+        status.setFlag(StatusRegister::FlagID::I, 0);
     }
     void MOS6502::executeSEI()
     {
-
+        status.setFlag(StatusRegister::FlagID::I, 1);
     }
     void MOS6502::executeCLD()
     {
-
+        status.setFlag(StatusRegister::FlagID::D, 0);
     }
     void MOS6502::executeSED()
     {
-
+        status.setFlag(StatusRegister::FlagID::D, 1);
     }
     void MOS6502::executeCLV()
     {
-
+        status.setFlag(StatusRegister::FlagID::V, 0);
     }
 
     void MOS6502::executeNOP()
@@ -776,83 +1318,154 @@ namespace NES::CPU
 
     void MOS6502::executeSLO()
     {
-
+        executeASL();
+        executeORA();
     }
     void MOS6502::executeRLA()
     {
-
+        executeROL();
+        executeAND();
     }
     void MOS6502::executeSRE()
     {
-
+        executeLSR();
+        executeEOR();
     }
     void MOS6502::executeRRA()
     {
-
+        executeROR();
+        executeADC();
     }
     void MOS6502::executeSAX()
     {
-
+        ALUResult result = alu.andOp(A, X);
+        bus->write(address, result.result);
     }
     void MOS6502::executeLAX()
     {
+        X = data;
+        A = data;
 
+        status.setFlag(StatusRegister::Z, data==0);
+        status.setFlag(StatusRegister::N, (data & (0x80) != 0));
     }
     void MOS6502::executeDCP()
     {
-
+        executeDEC();
+        executeCMP();
     }
     void MOS6502::executeISC()
     {
-
+        bool saveC = status.getFlag(StatusRegister::C);
+        executeINC();
+        status.setFlag(StatusRegister::C, saveC);
+        executeSBC();
     }
 
     void MOS6502::executeANC()
     {
+        ALUResult result = alu.andOp(A, data);
+        data = A = result.result;
+        status.applyMask(result.statusBits, result.statusChangedBits);
 
+        status.setFlag(StatusRegister::C, status.getFlag(StatusRegister::N));
     }
     void MOS6502::executeALR()
     {
-
+        executeAND();
+        ALUResult result = alu.shiftRight(A);
+        A = result.result;
+        status.applyMask(result.statusBits, result.statusChangedBits);
     }
     void MOS6502::executeARR()
     {
+        ALUResult result = alu.andOp(A, data);
 
+        bool bit5 = (result.result & ((uint8_t)1 << 5)); 
+        bool bit6 = (result.result & ((uint8_t)1 << 6));
+
+        status.setFlag(StatusRegister::V, bit5 ^ bit6);
+        status.setFlag(StatusRegister::C, bit6);
+
+        ALUResult result2 = alu.shiftRight(A);
+        A = result2.result;
+        
+        status.setFlag(StatusRegister::Z, A == 0);
+        status.setFlag(StatusRegister::N, (A & (0x80) != 0));
     }
     void MOS6502::executeXAA()
     {
+        // Puede ser 0x00, 0xFF o 0xEE
+        uint8_t magicConstant = 0x00;
+        uint8_t realValue = A | magicConstant;
 
+        A = realValue & X & data;
+        status.setFlag(StatusRegister::Z, A == 0);
+        status.setFlag(StatusRegister::N, (A & 0x80) != 0);
     }
     void MOS6502::executeAXS()
     {
+        ALUResult result = alu.andOp(A, data);
+        ALUResult result2 = alu.substract(result.result, data, status.getFlag(StatusRegister::C));
 
+        X = result2.result;
+
+        ALUResult result3 = alu.compare(result.result, data);
+        status.applyMask(result3.statusBits, result3.statusChangedBits);
     }
 
     void MOS6502::executeAHX()
     {
-
+        uint8_t value = A & X & (static_cast<uint8_t>(addressHigh + 1));
+        uint16_t unstableAddress = 
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
+        
+        bus->write(unstableAddress, value);
     }
     void MOS6502::executeSHX()
     {
-
+        uint8_t value = X & (static_cast<uint8_t>(addressHigh + 1));
+        uint16_t unstableAddress = 
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
+        
+        bus->write(unstableAddress, value);
     }
     void MOS6502::executeSHY()
     {
-
+        uint8_t value = Y & (static_cast<uint8_t>(addressHigh + 1));
+        uint16_t unstableAddress = 
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
+        
+        bus->write(unstableAddress, value);
     }
 
     void MOS6502::executeTAS()
     {
+        S = A & X;
+        uint8_t value = S & (static_cast<uint8_t>(addressHigh + 1));
 
+        uint16_t unstableAddress = 
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
+
+        bus->write(unstableAddress, value);
     }
     void MOS6502::executeLAS()
     {
+        uint8_t value = data & S;
 
+        A = X = S = value;
+
+        status.setFlag(StatusRegister::Z, value == 0);
+        status.setFlag(StatusRegister::N, (value & 0x80) != 0);
     }
 
     void MOS6502::executeKIL()
     {
-
+        isJammed = 1;
     }
     void MOS6502::executeUndefined()
     {

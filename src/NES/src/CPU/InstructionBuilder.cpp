@@ -9,9 +9,22 @@ namespace NES::CPU
         return *this;
     }
 
-    Instruction InstructionBuilder::build(InstructionOperation operation)
+    InstructionBuilder& InstructionBuilder::add(
+        std::initializer_list<MicroOperation> mOperations
+    )
     {
-        return Instruction(operation, operations);
+        operations.insert(
+            operations.end(),
+            mOperations.begin(),
+            mOperations.end()
+        );
+
+        return *this;
+    }
+
+    Instruction InstructionBuilder::build(AddressingMode addressing, InstructionOperation operation, AccessType access)
+    {
+        return Instruction(addressing, operation, access, operations);
     }
 
     void InstructionBuilder::clear()

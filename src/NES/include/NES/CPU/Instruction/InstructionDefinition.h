@@ -11,6 +11,7 @@ namespace NES::CPU
     {
         InstructionOperation operation;
         AddressingMode addressingMode;
+        AccessType accessType;
 
         uint8_t cycles;
     };

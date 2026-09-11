@@ -8,6 +8,7 @@ namespace NES::CPU
         public:
             ALUResult add(uint8_t a, uint8_t b, bool carryIn);
             ALUResult substract(uint8_t a, uint8_t b, bool carryIn);
+            ALUResult bitTest(uint8_t a, uint8_t b);
             ALUResult andOp(uint8_t a, uint8_t b);
             ALUResult orOp(uint8_t a, uint8_t b);
             ALUResult xorOp(uint8_t a, uint8_t b);
