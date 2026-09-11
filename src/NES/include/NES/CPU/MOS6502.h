@@ -22,9 +22,12 @@ namespace NES::CPU
 
             void connectBus(Bus *b);
 
+            void finishInstruction();
             void execute(MicroOperation operation);
 
             void mock();
+
+            bool isJammed;
         private:
             uint8_t A;
             uint8_t X;
@@ -52,37 +55,66 @@ namespace NES::CPU
 
             uint64_t cycles;
 
+            void incrementPC();
+            void decrementS();
+            void incrementS();
+
 
             // Micro operaciones
 
             void fetchOpcode();
+            void fetchOpcodeAndDiscard();
+            void fetchOpcodeDiscardAndExec();
+
+            void dummyRead();
+            void dummyWrite();
+
             void fetchOperand();
+            void readOperand();
+            void writeOperand();
+            void readOperandAndExecute();
+            void readOperandVariable();
             
+            void fetchZeroPageAddress();
             void fetchAddressLow();
             void fetchAddressHigh();
-
-            void fetchZeroPageAddress();
+            void fetchAddresshighExecute();
+            void fetchAddressHighAddX();
+            void fetchAddressHighAddY();
 
             void fetchIndirectLow();
             void fetchIndirectHigh();
+            void fetchIndirectHighAddY();
+            void fetchIndirectHighExecute();
 
-            void addXToAddress();
-            void addYToAddress();
-
+            void addZeroPageAddress(uint8_t);
             void addXToZeroPageAddress();
             void addYToZeroPageAddress();
 
-            void readOperand();
-            void writeOperand();
-
-            void dummyRead();
-
-            void execute();
+            void fetchBranch();
             void evaluateBranch();
+            void dummyBranchPageCrossRead();
+
+            //void addXToAddress();
+            //void addYToAddress();
 
             // Instrucciones
 
             void executeInstruction();
+
+            void pushStatus();
+            void pushPCHigh();
+            void pushPCLow();
+            void pushAccumulator();
+            void pushStatusBRK();
+
+            void pullstatus();
+            void pullPCLow();
+            void pullPCHigh();
+            void pullAccumulator();
+            void PullStatusBRK();
+            void fetchAddressHighToPC();
+            void stackPop();
 
             // Instrucciones Legales
 
@@ -132,15 +164,7 @@ namespace NES::CPU
             void executeBVS();
 
             void executeJMP();
-            void executeJSR();
-            void executeRTS();
-            void executeBRK();
-            void executeRTI();
 
-            void executePHA();
-            void executePLA();
-            void executePHP();
-            void executePLP();
             void executeTXS();
             void executeTSX();
 

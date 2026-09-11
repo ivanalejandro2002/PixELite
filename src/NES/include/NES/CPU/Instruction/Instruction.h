@@ -5,6 +5,7 @@
 
 #include <NES/CPU/Instruction/MicroOperation.h>
 #include <NES/CPU/Instruction/InstructionOperation.h>
+#include <NES/CPU/Addressing/AddressingMode.h>
 
 namespace NES::CPU
 {
@@ -13,15 +14,28 @@ namespace NES::CPU
     class Instruction
     {
         public:
-            Instruction(InstructionOperation operation,const std::vector<MicroOperation>& operations);
+            Instruction(
+                AddressingMode addressing,
+                InstructionOperation operation,
+                AccessType access,
+                const std::vector<MicroOperation>& operations
+            );
             void tick(MOS6502& cpu);
             bool finished() const;
+            void endTask();
             void reset();
+            void insertNext(MicroOperation operation);
+            void insertNextSequence(std::initializer_list<MicroOperation> operationList);
 
             InstructionOperation getOperation() const;
+            AddressingMode getAddressingMode() const;
+            AccessType getAccessType() const;
             void printInstruction();
-        private:
+
+            private:
+            AddressingMode addressingMode;
             InstructionOperation operation;
+            AccessType accessType;
             std::vector<MicroOperation> operations;
             std::size_t currentOperation = 0;
     };

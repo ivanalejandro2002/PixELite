@@ -211,4 +211,35 @@ namespace NES::CPU
             return "Unknown";
         }
     };
+
+
+    enum class AccessType : uint8_t
+    {
+        None,
+        Read,
+        Write,
+        ReadModifyWrite
+    };
+
+    struct AccessTypeMapper 
+    {
+        // Arreglo indexado por el valor numérico del enum
+        static constexpr std::array<std::string_view, 4> Strings = {
+            "None",
+            "Read",
+            "Write",
+            "ReadModifyWrite"
+        };
+
+        // Función estática para obtener la cadena original de forma segura
+        static constexpr std::string_view ToString(AccessType mode) 
+        {
+            auto index = static_cast<size_t>(mode);
+            if (index < Strings.size()) {
+                return Strings[index];
+            }
+            return "Unknown";
+        }
+    };
+
 }

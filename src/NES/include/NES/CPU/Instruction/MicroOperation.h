@@ -8,72 +8,130 @@ namespace NES::CPU
 {
     enum class MicroOperation : uint8_t
     {
-        // Fetch
+        // Control general
         FetchOpcode,
-        FetchOperand,
+        FetchOpcodeAndDiscard,
+        FetchOpcodeDiscardAndExec,
 
-        // Address
+        DummyRead,
+        DummyWrite,
+
+        // Lectura de operandos
+        FetchOperand,
+        ReadOperand,
+        WriteOperand,
+        ReadOperandAndExecute,
+        ReadOperandVariable,
+
+        // Direccionamiento
+        FetchZeroPageAddress,
         FetchAddressLow,
         FetchAddressHigh,
-
-        FetchZeroPageAddress,
+        FetchAddressHighExecute,
+        FetchAddressHighAddX,
+        FetchAddressHighAddY,
 
         FetchIndirectLow,
         FetchIndirectHigh,
-
-        // Address calculation
-        AddXToAddress,
-        AddYToAddress,
+        FetchIndirectHighAddY,
+        FetchIndirectHighExecute,
 
         AddXToZeroPageAddress,
         AddYToZeroPageAddress,
 
-        // Memory
-        ReadOperand,
-        WriteOperand,
+        // Branches
+        FetchBranch,
+        EvaluateBranch,
+        DummyBranchPageCrossRead,
 
-        // Bus cycles
-        DummyRead,
+        // Pila
+        PushStatus,
+        PushPCHigh,
+        PushPCLow,
+        PushAccumulator,
+        PushStatusBRK,
+        PushStatusInterrupt,
 
-        // Instruction
-        Execute,
-        EvaluateBranch
+        PullStatus,
+        PullPCLow,
+        PullPCHigh,
+        PullAccumulator,
+        PullStatusBRK,
+        FetchAddressHighToPC,
+        StackPop,
+
+        // Vectores de interrupción
+        FetchInterruptVectorLow,
+        FetchInterruptVectorHigh,
+
+        // Instrucciones especiales
+        CompleteRTI,
+        CompleteBRK
     };
 
     struct MicroOperationMapper 
     {
         // Arreglo indexado por el valor numérico del enum
-        static constexpr std::array<std::string_view, 16> Strings = {
-                // Fetch
+        static constexpr std::array<std::string_view, 43> Strings = {
+            // Control general
             "FetchOpcode",
-            "FetchOperand",
+            "FetchOpcodeAndDiscard",
+            "FetchOpcodeDiscardAndExec",
 
-            // Address
+            "DummyRead",
+            "DummyWrite",
+
+            // Lectura de operandos
+            "FetchOperand",
+            "ReadOperand",
+            "WriteOperand",
+            "ReadOperandAndExecute",
+            "ReadOperandVariable",
+
+            // Direccionamiento
+            "FetchZeroPageAddress",
             "FetchAddressLow",
             "FetchAddressHigh",
-
-            "FetchZeroPageAddress",
+            "FetchAddressHighExecute",
+            "FetchAddressHighAddX",
+            "FetchAddressHighAddY",
 
             "FetchIndirectLow",
             "FetchIndirectHigh",
-
-            // Address calculation
-            "AddXToAddress",
-            "AddYToAddress",
+            "FetchIndirectHighAddY",
+            "FetchIndirectHighExecute",
 
             "AddXToZeroPageAddress",
             "AddYToZeroPageAddress",
 
-            // Memory
-            "ReadOperand",
-            "WriteOperand",
+            // Branches
+            "FetchBranch",
+            "EvaluateBranch",
+            "DummyBranchPageCrossRead",
 
-            // Bus cycles
-            "DummyRead",
+            // Pila
+            "PushStatus",
+            "PushPCHigh",
+            "PushPCLow",
+            "PushAccumulator",
+            "PushStatusBRK",
+            "PushStatusInterrupt",
 
-            // Instruction
-            "Execute",
-            "EvaluateBranch"
+            "PullStatus",
+            "PullPCLow",
+            "PullPCHigh",
+            "PullAccumulator",
+            "PullStatusBRK",
+            "FetchAddressHighToPC",
+            "StackPop",
+
+            // Vectores de interrupción
+            "FetchInterruptVectorLow",
+            "FetchInterruptVectorHigh",
+
+            // Instrucciones especiales
+            "CompleteRTI",
+            "CompleteBRK"
         };
 
         // Función estática para obtener la cadena original de forma segura

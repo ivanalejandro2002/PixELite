@@ -15,5 +15,18 @@ namespace NES::CPU
             Instruction create(
                 const InstructionDefinition& definition
             ) const;
+
+        
+        private:
+
+            Instruction buildJSR() const;
+            Instruction buildRTS() const;
+            Instruction buildBRK() const;
+            Instruction buildRTI() const;
+
+            Instruction buildPHA() const;
+            Instruction buildPLA() const;
+            Instruction buildPHP() const;
+            Instruction buildPLP() const;
     };
 }

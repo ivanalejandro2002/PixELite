@@ -2,6 +2,7 @@
 #include <vector>
 #include <NES/CPU/Instruction/MicroOperation.h>
 #include <NES/CPU/Instruction/InstructionOperation.h>
+#include <NES/CPU/Addressing/AddressingMode.h>
 
 namespace NES::CPU
 {
@@ -11,8 +12,9 @@ namespace NES::CPU
     {
         public:
             InstructionBuilder &add(MicroOperation operation);
+            InstructionBuilder &add(std::initializer_list<MicroOperation> mOperations);
 
-            Instruction build(InstructionOperation operation);
+            Instruction build(AddressingMode addresing, InstructionOperation operation, AccessType access);
 
             void clear();
         private:

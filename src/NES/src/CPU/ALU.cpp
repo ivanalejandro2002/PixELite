@@ -66,6 +66,29 @@ namespace NES::CPU
         };
     }
 
+    ALUResult ALU::bitTest(uint8_t a, uint8_t b)
+    {
+        uint8_t result = a & b;
+
+        uint8_t flags = 0;
+        if(!result)
+            flags |= ALUResult::FlagMask::Z;
+        if(result & (0x40))
+            flags |= ALUResult::FlagMask::V;
+        if(result & (0x80))
+            flags |= ALUResult::FlagMask::N;
+
+
+        return
+        {
+            result,
+            flags,
+            ALUResult::FlagMask::Z |
+            ALUResult::FlagMask::V |
+            ALUResult::FlagMask::N
+        };
+    }
+
     ALUResult ALU::andOp(uint8_t a, uint8_t b)
     {
         uint8_t result = a & b;
