@@ -5,9 +5,14 @@ int main()
 {
     NES::NES nes;
 
-    
+    while(!nes.isCpuJammed())
+    {
+        nes.clock();
+    }
 
-    nes.mock();
+    nes.memoryDebug();
+
+    // nes.mock();
 
     return 0;
 }

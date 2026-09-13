@@ -11,8 +11,13 @@ namespace NES::CPU::AddressingModes
                 Immediate(builder);
                 break;
             
+            case AddressingMode::Implied:
+                Implied(builder);
+                break;
+            
             case AddressingMode::Accumulator:
                 Accumulator(builder);
+                break;
 
             case AddressingMode::ZeroPage:
                 ZeroPage(builder);

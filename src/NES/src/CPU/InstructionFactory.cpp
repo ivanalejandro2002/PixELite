@@ -34,6 +34,14 @@ namespace NES::CPU
             case InstructionOperation::PLP:
                 return buildPLP();
 
+            case InstructionOperation::TurnOn:
+                return buildTurnOn();
+                break;
+            
+            case InstructionOperation::Reset:
+                return buildReset();
+                break;
+
             default:
                 switch(definition.accessType)
                 {
@@ -207,6 +215,44 @@ namespace NES::CPU
             AddressingMode::Implied,
             InstructionOperation::PLP,
             AccessType::Read
+        );
+    }
+
+    Instruction InstructionFactory::buildReset() const
+    {
+        InstructionBuilder builder;
+
+        builder
+            .add(MicroOperation::FetchOpcode)
+            .add(MicroOperation::DummyPush)
+            .add(MicroOperation::DummyPush)
+            .add(MicroOperation::DummyPushForceI)
+            .add(MicroOperation::FetchStartingLow)
+            .add(MicroOperation::FetchStartingHigh);
+
+        return builder.build(
+            AddressingMode::Implied,
+            InstructionOperation::Reset,
+            AccessType::None
+        );
+    }
+
+    Instruction InstructionFactory::buildTurnOn() const
+    {
+        InstructionBuilder builder;
+
+        builder
+            .add(MicroOperation::FetchOpcodeAndDiscard)
+            .add(MicroOperation::DummyPush)
+            .add(MicroOperation::DummyPush)
+            .add(MicroOperation::DummyPushForceI)
+            .add(MicroOperation::FetchStartingLow)
+            .add(MicroOperation::FetchStartingHigh);
+
+        return builder.build(
+            AddressingMode::Implied,
+            InstructionOperation::TurnOn,
+            AccessType::None
         );
     }
 }

@@ -53,6 +53,9 @@ namespace NES::CPU
             
             std::optional<Instruction> currentInstruction;
 
+            bool pendingIUpdates;
+            bool iUpdate;
+
             uint64_t cycles;
 
             void incrementPC();
@@ -107,14 +110,22 @@ namespace NES::CPU
             void pushPCLow();
             void pushAccumulator();
             void pushStatusBRK();
+            void dummyPush();
+            void dummyPushForceI();
 
-            void pullstatus();
+            void pullStatus();
             void pullPCLow();
             void pullPCHigh();
             void pullAccumulator();
-            void PullStatusBRK();
+            void pullStatusBRK();
             void fetchAddressHighToPC();
             void stackPop();
+
+            void fetchInterruptVectorLow();
+            void fetchInterruptVectorHigh();
+            
+            void fetchStartingLow();
+            void fetchStartingHigh();
 
             // Instrucciones Legales
 
