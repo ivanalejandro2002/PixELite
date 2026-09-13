@@ -20,7 +20,9 @@ namespace NES
             void reset();
 
             void mock();
+            void memoryDebug();
 
+            bool isCpuJammed();
         private:
             static std::vector<uint8_t> createTestProgram();
 

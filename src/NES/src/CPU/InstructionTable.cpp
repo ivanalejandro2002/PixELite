@@ -220,6 +220,7 @@ namespace NES::CPU
         set(0xA9, InstructionOperation::LDA, AddressingMode::Immediate,         AccessType::Read,               2);
         set(0xAA, InstructionOperation::TAX, AddressingMode::Implied,           AccessType::None,               2);
         set(0xAB, InstructionOperation::LAX, AddressingMode::Immediate,         AccessType::Read,               2);
+        set(0xAC, InstructionOperation::LDY, AddressingMode::Absolute,          AccessType::Read,               4);
         set(0xAD, InstructionOperation::LDA, AddressingMode::Absolute,          AccessType::Read,               4);
         set(0xAE, InstructionOperation::LDX, AddressingMode::Absolute,          AccessType::Read,               4);
         set(0xAF, InstructionOperation::LAX, AddressingMode::Absolute,          AccessType::ReadModifyWrite,    6);

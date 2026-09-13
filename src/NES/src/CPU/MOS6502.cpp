@@ -2,6 +2,7 @@
 #include <NES/Bus/Bus.h>
 #include <iostream>
 #include <cassert>
+#include <iomanip>
 
 namespace NES::CPU
 {
@@ -9,12 +10,20 @@ namespace NES::CPU
     MOS6502::MOS6502()
     {
         cycles = 0;
-        PC = 0xFFFC;
-        S = 0xFD;
+        PC = 0x0000;
+        S = 0x00;
         isJammed = 0;
+        pendingIUpdates = 0;
+        iUpdate = 0;
 
         status.setFlag(StatusRegister::FlagID::I, true);
         status.setFlag(StatusRegister::FlagID::U, true);
+
+        currentInstruction = instructionFactory.create({
+            InstructionOperation::TurnOn,
+            AddressingMode::Implied,
+            AccessType::None,
+            7});
     }
 
     void MOS6502::connectBus(Bus *b)
@@ -24,18 +33,36 @@ namespace NES::CPU
 
     void MOS6502::clock()
     {
+        if(isJammed)return;
         cycles++;
+
+        if(!currentInstruction.has_value() || currentInstruction->finished())
+        {
+            fetchOpcode();
+            currentInstruction = instructionFactory.create(instructionTable.get(opcode));
+
+            // std::cout << "<" << std::hex << std::uppercase << std::setfill('0') << std::setw(4) << PC << ">";
+            // std::cout << InstructionOperationMapper::ToString(currentInstruction->getOperation()) << "("
+            //             << AddressingModeMapper::ToString(currentInstruction->getAddressingMode()) << "), ";
+
+            // currentInstruction->printInstruction();
+            return;
+        }
+        currentInstruction->tick(*this);
     }
 
     void MOS6502::reset()
     {
         cycles = 0;
-        PC = 0xFFFC;
-        if(S < 3)S = 0xFF - 3;
-        else S -= 3;
         isJammed = 0;
+        pendingIUpdates = 0;
+        iUpdate = 0;
 
-        status.setFlag(StatusRegister::FlagID::I, true);
+        currentInstruction = instructionFactory.create({
+            InstructionOperation::Reset,
+            AddressingMode::Implied,
+            AccessType::None,
+            7});
     }
 
     uint64_t MOS6502::getCycles()
@@ -86,6 +113,7 @@ namespace NES::CPU
             
             case MicroOperation::DummyWrite:
                 dummyWrite();
+                break;
 
             case MicroOperation::FetchOperand:
                 fetchOperand();
@@ -187,8 +215,16 @@ namespace NES::CPU
                 pushStatusBRK();
                 break;
             
+            case MicroOperation::DummyPush:
+                dummyPush();
+                break;
+
+            case MicroOperation::DummyPushForceI:
+                dummyPushForceI();
+                break;
+            
             case MicroOperation::PullStatus:
-                pullstatus();
+                pullStatus();
                 break;
 
             case MicroOperation::PullPCLow:
@@ -204,11 +240,27 @@ namespace NES::CPU
                 break;
 
             case MicroOperation::PullStatusBRK:
-                PullStatusBRK();
+                pullStatusBRK();
                 break;
 
             case MicroOperation::FetchAddressHighToPC:
                 fetchAddressHighToPC();
+                break;
+
+            case MicroOperation::FetchInterruptVectorHigh:
+                fetchInterruptVectorHigh();
+                break;
+
+            case MicroOperation::FetchInterruptVectorLow:
+                fetchInterruptVectorLow();
+                break;
+
+            case MicroOperation::FetchStartingLow:
+                fetchStartingLow();
+                break;
+                
+            case MicroOperation::FetchStartingHigh:
+                fetchStartingHigh();
                 break;
 
             case MicroOperation::StackPop:
@@ -890,7 +942,18 @@ namespace NES::CPU
         status.setFlag(StatusRegister::I, 1);
     }
 
-    void MOS6502::pullstatus()
+    void MOS6502::dummyPush()
+    {
+        decrementS();
+    }
+
+    void MOS6502::dummyPushForceI()
+    {
+        decrementS();
+        status.setFlag(StatusRegister::I, 1);
+    }
+
+    void MOS6502::pullStatusBRK()
     {
         uint16_t stackAddress =
             static_cast<uint16_t>(
@@ -912,6 +975,7 @@ namespace NES::CPU
         );
 
         status.setByte(pullReg.getByte());
+        incrementS();
     }
 
     void MOS6502::pullPCLow()
@@ -957,7 +1021,7 @@ namespace NES::CPU
         status.setFlag(StatusRegister::N, (A & 0x80) != 0);
     }
 
-    void MOS6502::PullStatusBRK()
+    void MOS6502::pullStatus()
     {
         uint16_t stackAddress =
             static_cast<uint16_t>(
@@ -967,6 +1031,9 @@ namespace NES::CPU
 
         StatusRegister pullReg;
         pullReg.setByte(bus->read(stackAddress));
+
+        pendingIUpdates = 1;
+        iUpdate = pullReg.getFlag(StatusRegister::I);
 
         pullReg.setFlag(
             StatusRegister::B,
@@ -978,9 +1045,13 @@ namespace NES::CPU
             status.getFlag(StatusRegister::U)
         );
 
-        pullReg.setFlag(StatusRegister::I, 0);
+        pullReg.setFlag(
+            StatusRegister::I,
+            status.getFlag(StatusRegister::I)
+        );
 
         status.setByte(pullReg.getByte());
+
     }
 
     void MOS6502::fetchAddressHighToPC()
@@ -998,6 +1069,38 @@ namespace NES::CPU
     void MOS6502::stackPop()
     {
         incrementS();
+    }
+
+    void MOS6502::fetchInterruptVectorLow()
+    {
+        address = 0xFFFE;
+        addressLow = bus->read(address);
+    }
+
+    void MOS6502::fetchInterruptVectorHigh()
+    {
+        address = 0xFFFF;
+        addressHigh = bus->read(address);
+
+        PC = 
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
+    }
+
+    void MOS6502::fetchStartingLow()
+    {
+        address = 0xFFFC;
+        addressLow = bus->read(address);
+    }
+
+    void MOS6502::fetchStartingHigh()
+    {
+        address = 0xFFFD;
+        addressHigh = bus->read(address);
+
+        PC = 
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
     }
 
     // Instrucciones
@@ -1290,11 +1393,13 @@ namespace NES::CPU
     }
     void MOS6502::executeCLI()
     {
-        status.setFlag(StatusRegister::FlagID::I, 0);
+        pendingIUpdates = 1;
+        iUpdate = 0;
     }
     void MOS6502::executeSEI()
     {
-        status.setFlag(StatusRegister::FlagID::I, 1);
+        pendingIUpdates = 1;
+        iUpdate = 1;
     }
     void MOS6502::executeCLD()
     {
@@ -1759,6 +1864,16 @@ namespace NES::CPU
         mockInstruction.printInstruction();
 
         definition = instructionTable.get(0xA5);
+        mockInstruction = instructionFactory.create(definition);
+
+        mockInstruction.printInstruction();
+
+        definition = instructionTable.get(0xE8);
+        mockInstruction = instructionFactory.create(definition);
+
+        mockInstruction.printInstruction();
+
+        definition = instructionTable.get(0x18);
         mockInstruction = instructionFactory.create(definition);
 
         mockInstruction.printInstruction();

@@ -51,18 +51,23 @@ namespace NES::CPU
         PushAccumulator,
         PushStatusBRK,
         PushStatusInterrupt,
+        DummyPush,
 
         PullStatus,
         PullPCLow,
         PullPCHigh,
         PullAccumulator,
         PullStatusBRK,
+        DummyPushForceI,
         FetchAddressHighToPC,
         StackPop,
 
         // Vectores de interrupción
         FetchInterruptVectorLow,
         FetchInterruptVectorHigh,
+
+        FetchStartingLow,
+        FetchStartingHigh,
 
         // Instrucciones especiales
         CompleteRTI,
@@ -72,7 +77,7 @@ namespace NES::CPU
     struct MicroOperationMapper 
     {
         // Arreglo indexado por el valor numérico del enum
-        static constexpr std::array<std::string_view, 43> Strings = {
+        static constexpr std::array<std::string_view, 46> Strings = {
             // Control general
             "FetchOpcode",
             "FetchOpcodeAndDiscard",
@@ -116,18 +121,23 @@ namespace NES::CPU
             "PushAccumulator",
             "PushStatusBRK",
             "PushStatusInterrupt",
+            "DummyPush",
 
             "PullStatus",
             "PullPCLow",
             "PullPCHigh",
             "PullAccumulator",
             "PullStatusBRK",
+            "DummyPushForceI",
             "FetchAddressHighToPC",
             "StackPop",
 
             // Vectores de interrupción
             "FetchInterruptVectorLow",
             "FetchInterruptVectorHigh",
+
+            "FetchStartingLow",
+            "FetchStartingHigh",
 
             // Instrucciones especiales
             "CompleteRTI",

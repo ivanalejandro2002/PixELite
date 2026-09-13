@@ -28,5 +28,8 @@ namespace NES::CPU
             Instruction buildPLA() const;
             Instruction buildPHP() const;
             Instruction buildPLP() const;
+
+            Instruction buildTurnOn() const;
+            Instruction buildReset() const;
     };
 }
