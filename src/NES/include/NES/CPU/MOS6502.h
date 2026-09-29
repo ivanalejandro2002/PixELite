@@ -55,12 +55,16 @@ namespace NES::CPU
 
             bool pendingIUpdates;
             bool iUpdate;
+            bool pendingNMI;
+            bool pendingIRQ;
 
             uint64_t cycles;
 
             void incrementPC();
             void decrementS();
             void incrementS();
+
+            void pollInterruptions();
 
 
             // Micro operaciones
@@ -110,6 +114,8 @@ namespace NES::CPU
             void pushPCLow();
             void pushAccumulator();
             void pushStatusBRK();
+            void pushStatusNMI();
+            void pushStatusIRQ();
             void dummyPush();
             void dummyPushForceI();
 
@@ -123,6 +129,8 @@ namespace NES::CPU
 
             void fetchInterruptVectorLow();
             void fetchInterruptVectorHigh();
+            void fetchNMIVectorLow();
+            void fetchNMIVectorHigh();
             
             void fetchStartingLow();
             void fetchStartingHigh();

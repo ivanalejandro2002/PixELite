@@ -24,6 +24,12 @@ namespace NES
         lastValue = value;
     }
 
+    Bus::Bus()
+    {
+        NMILine = IRQLine = true;
+        NMIActivation = false;
+    }
+
     void Bus::addDevice(Device *device)
     {
         devices.push_back(device);
@@ -42,6 +48,46 @@ namespace NES
     void Bus::addWriteMask(const DataMask &mask)
     {
         writeMasks.push_back(mask);
+    }
+
+    void Bus::resetBus()
+    {
+        NMILine = IRQLine = 1;
+        NMIActivation = 0;
+    }
+
+    bool Bus::getNMILine()
+    {
+        return NMILine;
+    }
+
+    bool Bus::getIRQLine()
+    {
+        return IRQLine;
+    }
+
+    bool Bus::getNMIActivation()
+    {
+        return NMIActivation;
+    }
+
+    void Bus::setNMILine(const bool &status)
+    {
+        if(!status && NMILine)
+        {
+            NMIActivation = true;
+        }
+        NMILine = status;
+    }
+
+    void Bus::setIRQLine(const bool &status)
+    {
+        IRQLine = status;
+    }
+
+    void Bus::finishNMI()
+    {
+        NMIActivation = 0;
     }
 
 

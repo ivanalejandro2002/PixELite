@@ -42,6 +42,14 @@ namespace NES::CPU
                 return buildReset();
                 break;
 
+            case InstructionOperation::NMI:
+                return buildNMI();
+                break;
+
+            case InstructionOperation::IRQ:
+                return buildIRQ();
+                break;
+
             default:
                 switch(definition.accessType)
                 {
@@ -252,6 +260,50 @@ namespace NES::CPU
         return builder.build(
             AddressingMode::Implied,
             InstructionOperation::TurnOn,
+            AccessType::None
+        );
+    }
+
+    Instruction InstructionFactory::buildNMI() const
+    {
+        InstructionBuilder builder;
+
+        builder
+            .add(MicroOperation::FetchOpcodeAndDiscard)
+            .add(MicroOperation::PushPCHigh)
+            .add(MicroOperation::PushPCLow)
+            .add(MicroOperation::PushStatusNMI)
+            // $FFFA
+            .add(MicroOperation::FetchNMIVectorLow)
+            // $FFFB
+            .add(MicroOperation::FetchNMIVectorHigh);
+
+
+        return builder.build(
+            AddressingMode::Implied,
+            InstructionOperation::NMI,
+            AccessType::None
+        );
+    }
+    
+    Instruction InstructionFactory::buildIRQ() const
+    {
+        InstructionBuilder builder;
+
+        builder
+            .add(MicroOperation::FetchOpcodeAndDiscard)
+            .add(MicroOperation::PushPCHigh)
+            .add(MicroOperation::PushPCLow)
+            .add(MicroOperation::PushStatusIRQ)
+            // $FFFE
+            .add(MicroOperation::FetchInterruptVectorLow)
+            // $FFFF
+            .add(MicroOperation::FetchInterruptVectorHigh);
+
+
+        return builder.build(
+            AddressingMode::Implied,
+            InstructionOperation::IRQ,
             AccessType::None
         );
     }

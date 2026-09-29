@@ -31,6 +31,9 @@ namespace NES::CPU
             AddressingMode getAddressingMode() const;
             AccessType getAccessType() const;
             void printInstruction();
+            uint8_t getRemainingOperations() const;
+            MicroOperation getBack() const;
+            bool pollable() const;
 
             private:
             AddressingMode addressingMode;
