@@ -101,6 +101,8 @@ namespace NES::CPU
         KIL,
         TurnOn,
         Reset,
+        NMI,
+        IRQ,
         Undefined
     };
 
@@ -108,7 +110,7 @@ namespace NES::CPU
     struct InstructionOperationMapper 
     {
         // Arreglo indexado por el valor numérico del enum
-        static constexpr std::array<std::string_view, 78> Strings = {
+        static constexpr std::array<std::string_view, 80> Strings = {
             "LDA",
             "LDX",
             "LDY",
@@ -202,6 +204,8 @@ namespace NES::CPU
             "KIL",
             "TurnOn",
             "Reset",
+            "NMI",
+            "IRQ",
             "Undefined"
         };
 

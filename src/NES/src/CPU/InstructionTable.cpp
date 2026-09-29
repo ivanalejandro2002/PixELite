@@ -65,7 +65,7 @@ namespace NES::CPU
         set(0x17, InstructionOperation::SLO, AddressingMode::ZeroPageX,         AccessType::ReadModifyWrite,    6);
         set(0x18, InstructionOperation::CLC, AddressingMode::Implied,           AccessType::None,               2);
         set(0x19, InstructionOperation::ORA, AddressingMode::AbsoluteY,         AccessType::Read,               4);
-        set(0x1A, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::Read,               2);
+        set(0x1A, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::None,               2);
         set(0x1B, InstructionOperation::SLO, AddressingMode::AbsoluteY,         AccessType::ReadModifyWrite,    7);
         set(0x1C, InstructionOperation::NOP, AddressingMode::AbsoluteX,         AccessType::None,               4);
         set(0x1D, InstructionOperation::ORA, AddressingMode::AbsoluteX,         AccessType::Read,               4);
@@ -99,7 +99,7 @@ namespace NES::CPU
         set(0x37, InstructionOperation::RLA, AddressingMode::ZeroPageX,         AccessType::ReadModifyWrite,    6);
         set(0x38, InstructionOperation::SEC, AddressingMode::Implied,           AccessType::None,               2);
         set(0x39, InstructionOperation::AND, AddressingMode::AbsoluteY,         AccessType::Read,               4);
-        set(0x3A, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::Read,               2);
+        set(0x3A, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::None,               2);
         set(0x3B, InstructionOperation::RLA, AddressingMode::AbsoluteY,         AccessType::ReadModifyWrite,    7);
         set(0x3C, InstructionOperation::NOP, AddressingMode::AbsoluteX,         AccessType::None,               4);
         set(0x3D, InstructionOperation::AND, AddressingMode::AbsoluteX,         AccessType::Read,               4);
@@ -133,7 +133,7 @@ namespace NES::CPU
         set(0x57, InstructionOperation::SRE, AddressingMode::ZeroPageX,         AccessType::ReadModifyWrite,    6);
         set(0x58, InstructionOperation::CLI, AddressingMode::Implied,           AccessType::None,               2);
         set(0x59, InstructionOperation::EOR, AddressingMode::AbsoluteY,         AccessType::Read,               4);
-        set(0x5A, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::Read,               2);
+        set(0x5A, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::None,               2);
         set(0x5B, InstructionOperation::SRE, AddressingMode::AbsoluteY,         AccessType::ReadModifyWrite,    7);
         set(0x5C, InstructionOperation::NOP, AddressingMode::AbsoluteX,         AccessType::None,               4);
         set(0x5D, InstructionOperation::EOR, AddressingMode::AbsoluteX,         AccessType::Read,               4);
@@ -167,7 +167,7 @@ namespace NES::CPU
         set(0x77, InstructionOperation::RRA, AddressingMode::ZeroPageX,         AccessType::ReadModifyWrite,    6);
         set(0x78, InstructionOperation::SEI, AddressingMode::Implied,           AccessType::None,               2);
         set(0x79, InstructionOperation::ADC, AddressingMode::AbsoluteY,         AccessType::Read,               4);
-        set(0x7A, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::Read,               2);
+        set(0x7A, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::None,               2);
         set(0x7B, InstructionOperation::RRA, AddressingMode::AbsoluteY,         AccessType::ReadModifyWrite,    7);
         set(0x7C, InstructionOperation::NOP, AddressingMode::AbsoluteX,         AccessType::None,               4);
         set(0x7D, InstructionOperation::ADC, AddressingMode::AbsoluteX,         AccessType::Read,               4);
@@ -269,7 +269,7 @@ namespace NES::CPU
         set(0xD7, InstructionOperation::DCP, AddressingMode::ZeroPageX,         AccessType::ReadModifyWrite,    6);
         set(0xD8, InstructionOperation::CLD, AddressingMode::Implied,           AccessType::None,               2);
         set(0xD9, InstructionOperation::CMP, AddressingMode::AbsoluteY,         AccessType::Read,               4);
-        set(0xDA, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::Read,               2);
+        set(0xDA, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::None,               2);
         set(0xDB, InstructionOperation::DCP, AddressingMode::AbsoluteY,         AccessType::ReadModifyWrite,    7);
         set(0xDC, InstructionOperation::NOP, AddressingMode::AbsoluteX,         AccessType::None,               4);
         set(0xDD, InstructionOperation::CMP, AddressingMode::AbsoluteX,         AccessType::Read,               4);
@@ -286,7 +286,7 @@ namespace NES::CPU
         set(0xE7, InstructionOperation::ISC, AddressingMode::ZeroPage,          AccessType::ReadModifyWrite,    5);
         set(0xE8, InstructionOperation::INX, AddressingMode::Implied,           AccessType::None,               2);
         set(0xE9, InstructionOperation::SBC, AddressingMode::Immediate,         AccessType::Read,               2);
-        set(0xEA, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::Read,               2);
+        set(0xEA, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::None,               2);
         set(0xEB, InstructionOperation::SBC, AddressingMode::Immediate,         AccessType::Read,               2);
         set(0xEC, InstructionOperation::CPX, AddressingMode::Absolute,          AccessType::Read,               4);
         set(0xED, InstructionOperation::SBC, AddressingMode::Absolute,          AccessType::Read,               4);
@@ -303,7 +303,7 @@ namespace NES::CPU
         set(0xF7, InstructionOperation::ISC, AddressingMode::ZeroPageX,         AccessType::ReadModifyWrite,    6);
         set(0xF8, InstructionOperation::SED, AddressingMode::Implied,           AccessType::None,               2);
         set(0xF9, InstructionOperation::SBC, AddressingMode::AbsoluteY,         AccessType::Read,               4);
-        set(0xFA, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::Read,               2);
+        set(0xFA, InstructionOperation::NOP, AddressingMode::Implied,           AccessType::None,               2);
         set(0xFB, InstructionOperation::ISC, AddressingMode::AbsoluteY,         AccessType::ReadModifyWrite,    7);
         set(0xFC, InstructionOperation::NOP, AddressingMode::AbsoluteX,         AccessType::None,               4);
         set(0xFD, InstructionOperation::SBC, AddressingMode::AbsoluteX,         AccessType::Read,               4);

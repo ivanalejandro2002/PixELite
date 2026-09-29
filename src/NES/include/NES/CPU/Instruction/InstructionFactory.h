@@ -31,5 +31,8 @@ namespace NES::CPU
 
             Instruction buildTurnOn() const;
             Instruction buildReset() const;
+
+            Instruction buildNMI() const;
+            Instruction buildIRQ() const;
     };
 }

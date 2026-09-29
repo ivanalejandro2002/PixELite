@@ -33,6 +33,8 @@ namespace NES
                 uint8_t orMask;
             };
 
+            Bus();
+
             uint8_t read(uint16_t addr);
             void write(uint16_t addr, uint8_t value);
 
@@ -43,6 +45,15 @@ namespace NES
             void addAddressMask(const AddressMask &mask);
             void addReadMask(const DataMask &mask);
             void addWriteMask(const DataMask &mask);
+            void resetBus();
+
+            bool getNMILine();
+            bool getIRQLine();
+            bool getNMIActivation();
+
+            void setNMILine(const bool &state);
+            void setIRQLine(const bool &state);
+            void finishNMI();
         private:
             std::vector<Device *> devices;
             std::vector<AddressMask> addressMasks;
@@ -55,5 +66,9 @@ namespace NES
             uint16_t normalizeAddress(uint16_t address) const;
             uint8_t applyReadMasks(uint16_t addr, uint8_t value)const;
             uint8_t applyWriteMasks(uint16_t addr, uint8_t value)const;
+
+            bool NMILine;
+            bool IRQLine;
+            bool NMIActivation;
     };
 }

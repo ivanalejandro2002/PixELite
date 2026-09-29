@@ -70,6 +70,23 @@ namespace NES::CPU
         return accessType;
     }
 
+    uint8_t Instruction::getRemainingOperations() const
+    {
+        return static_cast<uint8_t>(operations.size()) - currentOperation;
+    }
+
+    MicroOperation Instruction::getBack() const
+    {
+        return operations.back();
+    }
+
+    bool Instruction::pollable() const
+    {
+        if(operations.size() <= 1)return false;
+        return operations.back() == MicroOperation::ReadOperandAndExecute && 
+                operations[operations.size() - 2] == MicroOperation::ReadOperandVariable;
+    }
+
     void Instruction::printInstruction()
     {
         std::cout << "Addressing Mode: " << AddressingModeMapper::ToString(addressingMode) << "\n";

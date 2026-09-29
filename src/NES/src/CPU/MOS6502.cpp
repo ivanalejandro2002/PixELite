@@ -15,6 +15,7 @@ namespace NES::CPU
         isJammed = 0;
         pendingIUpdates = 0;
         iUpdate = 0;
+        pendingIRQ = pendingNMI = 0;
 
         status.setFlag(StatusRegister::FlagID::I, true);
         status.setFlag(StatusRegister::FlagID::U, true);
@@ -36,10 +37,43 @@ namespace NES::CPU
         if(isJammed)return;
         cycles++;
 
+        if(pendingIUpdates)
+        {
+            pendingIUpdates = 0;
+            status.setFlag(StatusRegister::I, iUpdate);
+        }
+        
+
         if(!currentInstruction.has_value() || currentInstruction->finished())
         {
+            if(pendingNMI)
+            {
+                currentInstruction =
+                    instructionFactory.create({
+                                                InstructionOperation::NMI,
+                                                AddressingMode::Implied,
+                                                AccessType::None,
+                                                7});
+                return;
+            }else if(pendingIRQ)
+            {
+                currentInstruction =
+                    instructionFactory.create({
+                                                InstructionOperation::IRQ,
+                                                AddressingMode::Implied,
+                                                AccessType::None,
+                                                7});
+
+                return;
+            }
+
             fetchOpcode();
             currentInstruction = instructionFactory.create(instructionTable.get(opcode));
+
+            if(currentInstruction->getRemainingOperations() == 1)
+            {
+                pollInterruptions();
+            }
 
             // std::cout << "<" << std::hex << std::uppercase << std::setfill('0') << std::setw(4) << PC << ">";
             // std::cout << InstructionOperationMapper::ToString(currentInstruction->getOperation()) << "("
@@ -48,7 +82,15 @@ namespace NES::CPU
             // currentInstruction->printInstruction();
             return;
         }
+
         currentInstruction->tick(*this);
+        if(currentInstruction->getRemainingOperations() == 1 && 
+            currentInstruction->getBack() != MicroOperation::ReadOperandVariable)
+        {
+            pollInterruptions();
+        }
+
+        if(currentInstruction->pollable())pollInterruptions();
     }
 
     void MOS6502::reset()
@@ -57,12 +99,15 @@ namespace NES::CPU
         isJammed = 0;
         pendingIUpdates = 0;
         iUpdate = 0;
+        pendingIRQ = pendingNMI = 0;
 
         currentInstruction = instructionFactory.create({
             InstructionOperation::Reset,
             AddressingMode::Implied,
             AccessType::None,
             7});
+        
+        bus->resetBus();
     }
 
     uint64_t MOS6502::getCycles()
@@ -89,6 +134,24 @@ namespace NES::CPU
     void MOS6502::incrementS()
     {
         S = static_cast<uint8_t>(S + 1);
+    }
+
+    void MOS6502::pollInterruptions()
+    {
+        pendingNMI = pendingIRQ = 0;
+
+        if(currentInstruction.has_value() && 
+            (currentInstruction->getOperation() == InstructionOperation::Reset ||
+            currentInstruction->getOperation() == InstructionOperation::TurnOn))
+            return;
+        
+        if(bus->getNMIActivation())
+        {
+            pendingNMI = true;
+            bus->finishNMI();
+        }
+        else if(!bus->getIRQLine() && !status.getFlag(StatusRegister::I))pendingIRQ = true;
+
     }
 
     void MOS6502::execute(MicroOperation operation)
@@ -214,6 +277,14 @@ namespace NES::CPU
             case MicroOperation::PushStatusBRK:
                 pushStatusBRK();
                 break;
+
+            case MicroOperation::PushStatusNMI:
+                pushStatusNMI();
+                break;
+            
+            case MicroOperation::PushStatusIRQ:
+                pushStatusIRQ();
+                break;
             
             case MicroOperation::DummyPush:
                 dummyPush();
@@ -253,6 +324,14 @@ namespace NES::CPU
 
             case MicroOperation::FetchInterruptVectorLow:
                 fetchInterruptVectorLow();
+                break;
+
+            case MicroOperation::FetchNMIVectorHigh:
+                fetchNMIVectorHigh();
+                break;
+            
+            case MicroOperation::FetchNMIVectorLow:
+                fetchNMIVectorLow();
                 break;
 
             case MicroOperation::FetchStartingLow:
@@ -942,6 +1021,46 @@ namespace NES::CPU
         status.setFlag(StatusRegister::I, 1);
     }
 
+    void MOS6502::pushStatusNMI()
+    {
+        StatusRegister pushReg;
+        pushReg.setByte(status.getByte());
+
+        pushReg.setFlag(StatusRegister::B, 0);
+        pushReg.setFlag(StatusRegister::U, 1);
+
+        uint16_t stackAddress =
+            static_cast<uint16_t>(
+                0x0100 | 
+                static_cast<uint16_t>(S)
+            );
+        
+        bus->write(stackAddress,pushReg.getByte());
+        decrementS();
+
+        status.setFlag(StatusRegister::I, 1);
+    }
+
+    void MOS6502::pushStatusIRQ()
+    {
+        StatusRegister pushReg;
+        pushReg.setByte(status.getByte());
+
+        pushReg.setFlag(StatusRegister::B, 0);
+        pushReg.setFlag(StatusRegister::U, 1);
+
+        uint16_t stackAddress =
+            static_cast<uint16_t>(
+                0x0100 | 
+                static_cast<uint16_t>(S)
+            );
+        
+        bus->write(stackAddress,pushReg.getByte());
+        decrementS();
+
+        status.setFlag(StatusRegister::I, 1);
+    }
+
     void MOS6502::dummyPush()
     {
         decrementS();
@@ -1080,6 +1199,23 @@ namespace NES::CPU
     void MOS6502::fetchInterruptVectorHigh()
     {
         address = 0xFFFF;
+        addressHigh = bus->read(address);
+
+        PC = 
+            static_cast<uint16_t>(addressLow) |
+            (static_cast<uint16_t>(addressHigh) << 8);
+
+    }
+
+    void MOS6502::fetchNMIVectorLow()
+    {
+        address = 0xFFFA;
+        addressLow = bus->read(address);
+    }
+
+    void MOS6502::fetchNMIVectorHigh()
+    {
+        address = 0xFFFB;
         addressHigh = bus->read(address);
 
         PC = 

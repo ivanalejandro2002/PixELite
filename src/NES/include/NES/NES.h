@@ -22,6 +22,10 @@ namespace NES
             void mock();
             void memoryDebug();
 
+            void debugNMI();
+            void debugIRQ();
+            void debugHighIRQ();
+
             bool isCpuJammed();
         private:
             static std::vector<uint8_t> createTestProgram();
