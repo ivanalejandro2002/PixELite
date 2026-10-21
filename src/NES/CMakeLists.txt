@@ -10,12 +10,21 @@ add_library(NES
     src/CPU/InstructionTable.cpp
     src/CPU/InstructionBuilder.cpp
 
+    src/PPU/CIRAM.cpp
+    src/PPU/PaletteRAM.cpp
+    src/PPU/PPU2C02.cpp
+    src/PPU/PPURegisters.cpp
+
     src/Memory/RAM.cpp
     src/Memory/PRGROM.cpp
+
+    src/Cartridge/CHRROM.cpp
 
     src/Bus.cpp
 
     src/NES.cpp
+
+    src/Graphics/FrameBuffer.cpp
 )
 
 target_include_directories(NES PUBLIC

@@ -4,7 +4,8 @@ namespace NES
 {
     CIRAM::CIRAM(Mirroring mirroring)
         : mirroring(mirroring)
-    {    
+    {
+        isWritable = true;
     }
 
     bool CIRAM::handles(uint16_t addr) const
@@ -19,9 +20,10 @@ namespace NES
 
     uint16_t CIRAM::translateAddress(uint16_t address) const
     {
-        if(address >= 0x3000)add -= 0x1000;
+        if(address >= 0x3000)
+            address -= 0x1000;
 
-        const uint16_t offset = (addr & 0x1FFF);
+        const uint16_t offset = address & 0x0FFF;
 
         const uint16_t nametable = offset >> 10;
         const uint16_t position = offset & 0x03FF;
@@ -41,7 +43,7 @@ namespace NES
             case Mirroring::SingleScreenLower:
                 physicalNametable = 0;
                 break;
-            
+
             case Mirroring::SingleScreenUpper:
                 physicalNametable = 1;
                 break;

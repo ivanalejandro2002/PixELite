@@ -15,6 +15,9 @@ namespace NES
 
     uint8_t CHRROM::read(uint16_t addr)
     {
+        if(addr >= memory.size())
+            return 0xFF;
+
         return memory[addr];
     }
 

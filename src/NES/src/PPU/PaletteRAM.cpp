@@ -2,6 +2,12 @@
 
 namespace NES
 {
+
+    PaletteRAM::PaletteRAM()
+    {
+        isWritable = true;
+    }
+
     bool PaletteRAM::handles(uint16_t addr) const
     {
         return addr >= 0x3F00 && addr <= 0x3FFF;

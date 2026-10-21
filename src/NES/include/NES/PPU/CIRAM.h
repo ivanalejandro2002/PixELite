@@ -1,7 +1,7 @@
 #pragma once
 
 #include <NES/Device.h>
-#include <array.h>
+#include <array>
 #include <cstdint>
 
 namespace NES
@@ -16,11 +16,9 @@ namespace NES
                 SingleScreenLower,
                 SingleScreenUpper,
                 FourScreen
-            }
+            };
 
-            explicit CIRAM(
-                Mirroring mirroring = Mirroring::Horizontal
-            );
+            explicit CIRAM(Mirroring mirroring);
 
             bool handles(uint16_t addr) const override;
 

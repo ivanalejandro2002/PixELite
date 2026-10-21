@@ -9,6 +9,8 @@ namespace NES
     class PaletteRAM : public Device
     {
         public:
+            PaletteRAM();
+
             bool handles(uint16_t addr) const override;
 
             uint8_t read(uint16_t addr) override;
