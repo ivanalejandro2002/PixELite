@@ -33,9 +33,11 @@ namespace NES
 
             const PPU2C02& getPPU() const;
             PPU2C02& getPPU();
-        private:
+
             static std::vector<uint8_t> createTestProgram();
             static std::vector<uint8_t> createTestCHR();
+        private:
+            
 
             RAM ram;
             PRGROM prgRom;

@@ -60,29 +60,6 @@ namespace NES
 
     void PPU2C02::debugGenerateBackground()
     {
-        // Paleta RGB de referencia para los 64 colores de la NES.
-        static constexpr std::array<std::array<uint8_t, 3>, 64> nesPalette = {{
-            {{ 84,  84,  84}}, {{  0,  30, 116}}, {{  8,  16, 144}}, {{ 48,   0, 136}},
-            {{ 68,   0, 100}}, {{ 92,   0,  48}}, {{ 84,   4,   0}}, {{ 60,  24,   0}},
-            {{ 32,  42,   0}}, {{  8,  58,   0}}, {{  0,  64,   0}}, {{  0,  60,   0}},
-            {{  0,  50,  60}}, {{  0,   0,   0}}, {{  0,   0,   0}}, {{  0,   0,   0}},
-
-            {{152, 150, 152}}, {{  8,  76, 196}}, {{ 48,  50, 236}}, {{ 92,  30, 228}},
-            {{136,  20, 176}}, {{160,  20, 100}}, {{152,  34,  32}}, {{120,  60,   0}},
-            {{ 84,  90,   0}}, {{ 40, 114,   0}}, {{  8, 124,   0}}, {{  0, 118,  40}},
-            {{  0, 102, 120}}, {{  0,   0,   0}}, {{  0,   0,   0}}, {{  0,   0,   0}},
-
-            {{236, 238, 236}}, {{ 76, 154, 236}}, {{120, 124, 236}}, {{176,  98, 236}},
-            {{228,  84, 236}}, {{236,  88, 180}}, {{236, 106, 100}}, {{212, 136,  32}},
-            {{160, 170,   0}}, {{116, 196,   0}}, {{ 76, 208,  32}}, {{ 56, 204, 108}},
-            {{ 56, 180, 204}}, {{ 60,  60,  60}}, {{  0,   0,   0}}, {{  0,   0,   0}},
-
-            {{236, 238, 236}}, {{168, 204, 236}}, {{188, 188, 236}}, {{212, 178, 236}},
-            {{236, 174, 236}}, {{236, 174, 212}}, {{236, 180, 176}}, {{228, 196, 144}},
-            {{204, 210, 120}}, {{180, 222, 120}}, {{168, 226, 144}}, {{152, 226, 180}},
-            {{160, 214, 228}}, {{160, 162, 160}}, {{  0,   0,   0}}, {{  0,   0,   0}}
-        }};
-
         // Base de la nametable seleccionada por PPUCTRL.
         const uint16_t nametableBase =
             0x2000 + (static_cast<uint16_t>(PPUCTRL & 0x03) * 0x0400);
@@ -194,6 +171,61 @@ namespace NES
                     color[2]
                 );
             }
+        }
+    }
+
+    void PPU2C02::clock()
+    {
+        ++cycle;
+
+        const bool renderingEnabled = (PPUMASK & 0x18) != 0;
+        const bool visibleScanLine = scanline >= 0 && scanline < 240;
+        const bool preRenderScanLine = scanline == -1;
+
+        const bool renderScanLine = visibleScanLine || preRenderScanLine;
+
+        if(scanline == 241 && cycle == 1)
+        {
+            //Vblank
+            PPUSTATUS |= 0x80;
+        }
+
+        if(preRenderScanLine && cycle == 1)
+        {
+            //Limpiar Vblank y flags de sprite
+            PPUSTATUS &= 0x1F;
+        }
+
+        if(renderScanLine && renderingEnabled)
+        {
+            const bool backgroundFetchCycle = 
+                (cycle >= 1 && cycle <= 256) ||
+                (cycle >= 321 && cycle <= 336);
+
+            if(visibleScanLine && cycle >= 1 && cycle <= 256)
+                renderBackgroundPixel();
+
+            if(backgroundFetchCycle)
+            {
+                updateBackgroundShifters();
+                backgroundFetch();
+            }
+
+            if(cycle == 256) incrementY();
+
+            if(cycle == 257) transferAddressX();
+
+            if(preRenderScanLine && cycle >= 280 && cycle <= 304) transferAddressY();
+        }
+
+
+        if(cycle >= 341)
+        {
+            cycle = 0;
+            ++scanline;
+
+            if(scanline > 260)
+                scanline = -1;
         }
     }
 
@@ -429,6 +461,20 @@ namespace NES
         ioLatch = 0;
 
         OAM.fill(0);
+
+        bgPatternShiftLow = 0;
+        bgPatternShiftHigh = 0;
+
+        bgAttributeShiftLow = 0;
+        bgAttributeShiftHigh = 0;
+
+        nextTileID = 0;
+        nextTileAttribute = 0;
+        nextTileLow = 0;
+        nextTileHigh = 0;
+
+        scanline = -1;
+        cycle = 0;
     }
 
     uint8_t PPU2C02::debugPPUCTRL() const {return PPUCTRL;}
@@ -441,4 +487,188 @@ namespace NES
     uint16_t PPU2C02::debugT() const {return t;}
     uint8_t PPU2C02::debugX() const {return fineX;}
     bool PPU2C02::debugW() const {return writeToggle;}
+
+    uint16_t PPU2C02::debugCycle() const {return cycle;}
+    int16_t PPU2C02::debugScanline() const {return scanline;}
+
+    void PPU2C02::incrementCoarseX()
+    {
+        if(!(PPUMASK & 0x18)) return;
+
+        if((v & 0x001F) == 31)
+        {
+            v &= ~0x001F;
+            v ^= 0x0400;
+        }else
+        {
+            ++v;
+        }
+    }
+
+    void PPU2C02::incrementY()
+    {
+        if(!(PPUMASK & 0x18))return;
+
+        if((v & 0x7000) != 0x7000)
+        {
+            v += 0x1000;
+            return;
+        }
+
+        v &= ~0x7000;
+        uint16_t coarseY = (v & 0x03E0) >> 5;
+        if(coarseY == 29)
+        {
+            coarseY = 0;
+            v ^= 0x0800;
+        }else if(coarseY == 31)
+        {
+            coarseY = 0;
+        }else
+        {
+            ++coarseY;
+        }
+
+        v = (v & ~0x03E0) | (coarseY << 5);
+    }
+
+    void PPU2C02::transferAddressX()
+    {
+        if(!(PPUMASK & 0x18)) return;
+
+        v = (v & ~0x041F) | (t & 0x041F);
+    }
+
+    void PPU2C02::transferAddressY()
+    {
+        if(!(PPUMASK & 0x18)) return;
+
+        v = (v & ~0x7BE0) | (t & 0x7BE0);
+    }
+
+
+    void PPU2C02::loadBackgroundShifters()
+    {
+        bgPatternShiftLow = (bgPatternShiftLow & 0xFF00) | nextTileLow;
+
+        bgPatternShiftHigh = (bgPatternShiftHigh & 0xFF00) | nextTileHigh;
+
+        const uint8_t attributeLow = (nextTileAttribute & 0x01) ? 0xFF : 0x00;
+
+        const uint8_t attributeHigh = (nextTileAttribute & 0x02) ? 0xFF : 0x00;
+
+        bgAttributeShiftLow = (bgAttributeShiftLow & 0xFF00) | attributeLow;
+        bgAttributeShiftHigh = (bgAttributeShiftHigh & 0xFF00) | attributeHigh;
+    }
+
+    void PPU2C02::updateBackgroundShifters()
+    {
+        bgPatternShiftLow <<= 1;
+        bgPatternShiftHigh <<= 1;
+
+        bgAttributeShiftLow <<= 1;
+        bgAttributeShiftHigh <<= 1;
+    }
+
+    void PPU2C02::backgroundFetch()
+    {
+        switch(cycle & 0x0007)
+        {
+            case 1:
+                {
+                    //Lectura ID de nametable
+                    const uint16_t address = 0x2000 | (v & 0x0FFF);
+
+                    nextTileID = readVRAM(address);
+                    break;
+                }
+            
+            case 3:
+                //Lectura de tabla de atributos
+                {
+                    const uint16_t address = 
+                        0x23C0 | (v & 0x0C00) | ((v>>4) & 0x0038) | ((v>>2) & 0x0007);
+
+                    const uint8_t attribute = readVRAM(address);
+
+                    const uint8_t shift =
+                        static_cast<uint8_t>(((v>>4) & 0x04) | (v & 0x02));
+
+                    nextTileAttribute = (attribute >> shift) & 0x03;
+                    break;
+                }
+
+            case 5:
+                //Lectura baja CHR
+                {
+                    const uint16_t fineY = (v >> 12) & 0x07;
+
+                    const uint16_t patternBase = (PPUCTRL & 0x10)? 0x1000 : 0x0000;
+
+                    const uint16_t address =
+                        patternBase + static_cast<uint16_t>(nextTileID) * 16 + fineY;
+
+                    nextTileLow = readVRAM(address);
+                    break;
+                }
+
+            case 7:
+                //Lectura plano alto CHR
+                {
+                    const uint16_t fineY = (v >> 12) & 0x07;
+
+                    const uint16_t patternBase = (PPUCTRL & 0x10)? 0x1000 : 0x0000;
+
+                    const uint16_t address = 
+                        patternBase + static_cast<uint16_t>(nextTileID) * 16 + fineY + 8;
+
+                    nextTileHigh = readVRAM(address);
+                    break;
+                }
+
+            case 0:
+                {
+                    loadBackgroundShifters();
+
+                    incrementCoarseX();
+                    break;
+                }
+        }
+    }
+
+    void PPU2C02::renderBackgroundPixel()
+    {
+        const int x = static_cast<int>(cycle) - 1;
+        const int y = static_cast<int>(scanline);
+
+        if(x < 0 || x >= Graphics::FrameBuffer::Width ||
+            y < 0 || y >= Graphics::FrameBuffer::Height)
+            return;
+
+        uint8_t pixel = 0;
+        uint8_t backgroundPalette = 0;
+
+        const bool showBackGround = (PPUMASK & 0x08) != 0;
+        const bool showLeftBackGround = (PPUMASK & 0x02) != 0;
+
+        if(showBackGround && (x >= 8 || showLeftBackGround))
+        {
+            const uint16_t mux = static_cast<uint16_t> (0x8000 >> fineX);
+
+            pixel = ((bgPatternShiftLow & mux) ? 1: 0) |
+                    ((bgPatternShiftHigh & mux)? 2: 0);
+
+            backgroundPalette = ((bgAttributeShiftLow & mux) ? 1: 0) |
+                                ((bgAttributeShiftHigh & mux)? 2: 0);
+        }
+
+        const uint16_t paletteAddress = 
+            (pixel == 0)? 0x3F00: static_cast<uint16_t>(0x3F00 + backgroundPalette * 4 + pixel);
+
+        const uint8_t colorIndex = readVRAM(paletteAddress) & 0x3F;
+
+        const auto& color = nesPalette[colorIndex];
+
+        frameBuffer.setPixel(x, y, color[0], color[1], color[2]);
+    }
 }
