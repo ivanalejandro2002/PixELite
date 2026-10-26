@@ -1,0 +1,104 @@
+std::vector<uint8_t> NES::createTestProgram()
+    {
+        std::vector<uint8_t> program(0x8000, 0x00);
+
+        // ==========================================
+        // CASO 1: Acarreo Simple (Carry Flag 'C')
+        // Operación: 0xFF + 0x01 + C(0) = 0x00 con Carry C=1
+        // ==========================================
+        // $8000: CLC         (Garantiza C=0)
+        program[0x0000] = 0x18;
+        // $8001: LDA #$FF
+        program[0x0001] = 0xA9; program[0x0002] = 0xFF;
+        // $8003: ADC #$01    (0xFF + 0x01 = 0x100 -> A=0x00, C=1, Z=1)
+        program[0x0003] = 0x69; program[0x0004] = 0x01;
+
+        // ==========================================
+        // CASO 2: Suma con Carry Entrante y Flag Z
+        // Operación: 0x05 + 0x00 + C(1) = 0x06 (Verifica que ADC use el C previo)
+        // ==========================================
+        // $8005: ADC #$00    (0x00 + 0x00 + C(1) -> A=0x01, C=0, Z=0)
+        program[0x0005] = 0x69; program[0x0006] = 0x00;
+        // $8007: STA $0200   (Respuesta 1: Debe ser 0x01)
+        program[0x0007] = 0x8D; program[0x0008] = 0x00; program[0x0009] = 0x02;
+
+        // ==========================================
+        // CASO 3: Desbordamiento Positivo (Overflow Flag 'V')
+        // Operación: +127 + +1 (+0x7F + +0x01) = +128 (0x80 = -128 con signo)
+        // Al pasar de positivo a negativo en con signo, V DEBE ser 1.
+        // ==========================================
+        // $800A: CLC
+        program[0x000A] = 0x18;
+        // $800B: LDA #$7F    (+127 en complemento a dos)
+        program[0x000B] = 0xA9; program[0x000C] = 0x7F;
+        // $800D: ADC #$01    (Resultado: 0x80 -> Bit 7 es 1, N=1, V=1, C=0)
+        program[0x000D] = 0x69; program[0x000E] = 0x01;
+        // $800F: STA $0201   (Respuesta 2: Debe ser 0x80)
+        program[0x000F] = 0x8D; program[0x0010] = 0x01; program[0x0011] = 0x02;
+
+        // Guardamos el registro de estado P del Desbordamiento (P1)
+        // $8012: PHP
+        program[0x0012] = 0x08;
+        // $8013: PLA
+        program[0x0013] = 0x68;
+        // $8014: STA $0202   (Respuesta 3: P1 con V=1 y N=1)
+        program[0x0014] = 0x8D; program[0x0015] = 0x02; program[0x0016] = 0x02;
+
+        // ==========================================
+        // CASO 4: Desbordamiento Negativo (Overflow V y Carry C al tiempo)
+        // Operación: -128 + -1 (0x80 + 0xFF) = -129 (0x7F con desbordamiento)
+        // Dos números negativos producen un resultado positivo -> V=1, C=1
+        // ==========================================
+        // $8017: CLC
+        program[0x0017] = 0x18;
+        // $8018: LDA #$80    (-128 en complemento a dos)
+        program[0x0018] = 0xA9; program[0x0019] = 0x80;
+        // $801B: ADC #$FF    (-1 en complemento a dos -> 0x80 + 0xFF = 0x17F -> A=0x7F, V=1, C=1)
+        program[0x001A] = 0x69; program[0x001B] = 0xFF;
+        // $801D: STA $0203   (Respuesta 4: Debe ser 0x7F)
+        program[0x001C] = 0x8D; program[0x001D] = 0x03; program[0x001E] = 0x02;
+
+        // Guardamos el registro de estado P final (P2)
+        // $8020: PHP
+        program[0x001F] = 0x08;
+        // $8021: PLA
+        program[0x0020] = 0x68;
+        // $8022: STA $0204   (Respuesta 5: P2 con V=1 y C=1)
+        program[0x0021] = 0x8D; program[0x0022] = 0x04; program[0x0023] = 0x02;
+
+        // ==========================================
+        // FIN DEL PROGRAMA
+        // ==========================================
+        // $8025: KIL / JAM
+        program[0x0024] = 0x02;
+
+        // Vectores de Reset ($FFFC/$FFFD apuntando a $8000)
+        program[0x7FFC] = 0x00;
+        program[0x7FFD] = 0x80;
+
+        return program;
+
+    }
+
+
+
+
+Salida:
+Page: 2:
+
+01 80 F4 7F 75 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 

@@ -1,0 +1,60 @@
+std::vector<uint8_t> NES::createTestProgram()
+    {
+        std::vector<uint8_t> program(0x8000, 0x00);
+
+        // ==========================================
+        // 1. PREPARACIÓN DE DATOS Y MEMORIA
+        // ==========================================
+        // $8000: LDA #$80    (Carga 0x80 en A)
+        program[0x0000] = 0xA9; program[0x0001] = 0x80;
+
+        // $8002: STA $0210   (Guarda 0x80 en el objetivo $0210)
+        program[0x0002] = 0x8D; program[0x0003] = 0x10; program[0x0004] = 0x02;
+
+        // $8005: LDA #$0F    (Carga el valor de prueba 0x0F en A)
+        program[0x0005] = 0xA9; program[0x0006] = 0x0F;
+
+        // $8007: CLC         (Garantiza C=0 antes de ejecutar SLO)
+        program[0x0007] = 0x18;
+
+        // ==========================================
+        // 2. EJECUCIÓN DE LA INSTRUCCIÓN ILEGAL SLO
+        // ==========================================
+        // $8008: SLO $0210   (Opcode no oficial 0x0F - Absoluto)
+        // - Desplaza bits en $0210: 0x80 se convierte en 0x00, Carry C pasa a 1.
+        // - Aplica ORA a A: 0x0F | 0x00 = 0x0F.
+        program[0x0008] = 0x0F; 
+        program[0x0009] = 0x10; // Byte bajo de $0210
+        program[0x000A] = 0x02; // Byte alto de $0210
+
+        // ==========================================
+        // 3. VOLCADO DE RESULTADOS A RAM ($0200+)
+        // ==========================================
+        // $800B: STA $0200   (Guarda el Acumulador A resultante)
+        program[0x000B] = 0x8D; program[0x000C] = 0x00; program[0x000D] = 0x02;
+
+        // $800E: PHP         (Apila el registro P de banderas tras SLO)
+        program[0x000E] = 0x08;
+
+        // $800F: PLA         (Recupera P hacia A)
+        program[0x000F] = 0x68;
+
+        // $8010: STA $0201   (Guarda las banderas P en $0201)
+        program[0x0010] = 0x8D; program[0x0011] = 0x01; program[0x0012] = 0x02;
+
+        // $8013: KIL / JAM   (Fin del programa)
+        program[0x0013] = 0x02;
+
+        // Vectores de Reset ($FFFC/$FFFD apuntando a $8000)
+        program[0x7FFC] = 0x00;
+        program[0x7FFD] = 0x80;
+
+        return program;
+
+    }
+
+
+SALIDA
+$2000 0x0F
+$2001 0x35
+$2002 0x00

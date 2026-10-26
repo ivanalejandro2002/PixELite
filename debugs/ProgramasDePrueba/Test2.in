@@ -1,0 +1,57 @@
+std::vector<uint8_t> NES::createTestProgram()
+    {
+        std::vector<uint8_t> program(0x8000, 0x00);
+
+        // --- Inicialización y Aritmética ---
+        // $8000: LDA #$2A (Carga 0x2A en A)
+        program[0x0000] = 0xA9; program[0x0001] = 0x2A;
+        // $8002: STA $00   (Guarda en $00) -> RAM[$00] = 2A
+        program[0x0002] = 0x85; program[0x0003] = 0x00;
+        // $8004: ADC #$05  (Suma 5 a A. 0x2A + 0x05 = 0x2F)
+        program[0x0004] = 0x69; program[0x0005] = 0x05;
+        // $8006: STA $01   (Guarda en $01) -> RAM[$01] = 2F
+        program[0x0006] = 0x85; program[0x0007] = 0x01;
+
+        // --- Modificación de Índices ---
+        // $8008: LDX #$01  (X = 01)
+        program[0x0008] = 0xA2; program[0x0009] = 0x01;
+        // $800A: STX $02   (Guarda X en $02) -> RAM[$02] = 01
+        program[0x000A] = 0x86; program[0x000B] = 0x02;
+        // $800C: INX       (Incrementa X, X = 02)
+        program[0x000C] = 0xE8;
+
+        // --- Lógica y Operaciones de Bits ---
+        // $800D: AND #$F0  (0x2F AND 0xF0 = 0x20)
+        program[0x000D] = 0x29; program[0x000E] = 0xF0;
+        // $800F: STA $03   (Guarda en $03) -> RAM[$03] = 20
+        program[0x000F] = 0x85; program[0x0010] = 0x03;
+        // $8011: ASL A     (Shift a la izquierda de A. 0x20 << 1 = 0x40)
+        // Nota: Como A se vuelve 0x40, el bit 7 es 0. ¡La bandera N (Negative) NO se activa!
+        program[0x0011] = 0x0A;
+        // $8012: STA $04   (Guarda en $04) -> RAM[$04] = 40
+        program[0x0012] = 0x85; program[0x0013] = 0x04;
+
+        // --- Corrección del Salto Condicional (Branch) ---
+        // Como el flag N es 0, un BMI (Branch if Minus) NO saltaría. 
+        // Para mantener el flujo del test y probar el direccionamiento indexado:
+        // $8014: BPL $8019 (Branch if Plus. Salta 3 bytes si N=0. Como A=0x40, N=0, salta a $8019)
+        program[0x0014] = 0x10; program[0x0015] = 0x03; 
+        // $8016: CLC       (Se salta si el branch funciona)
+        program[0x0016] = 0x18;
+        // $8017: BRK       (Se salta si el branch funciona)
+        program[0x0017] = 0x00;
+
+        // Destino del salto: $8019
+        // $8019: STA $03,X (Guarda A=0x40 en $03 + X(02) = $05) -> RAM[$05] = 40
+        program[0x0019] = 0x95; program[0x001A] = 0x03;
+
+        // --- Fin de Programa ---
+        // $801B: KIL / JAM
+        program[0x001B] = 0xB2; 
+
+        // Vectores de Reset
+        program[0x7FFC] = 0x00;
+        program[0x7FFD] = 0x80;
+
+        return program;
+    }

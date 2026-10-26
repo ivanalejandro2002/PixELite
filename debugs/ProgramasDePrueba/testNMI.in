@@ -1,0 +1,33 @@
+std::vector<uint8_t> NES::createTestProgram()
+    {
+        std::vector<uint8_t> program(0x8000, 0x00);
+
+        // 1. Programa Principal desde $8000 (Índice 0x0000)
+        program[0x0000] = 0x38; // SEC (2 ciclos) -> Polling captura NMI
+        program[0x0001] = 0xEA; // NOP (Al volver de RTI)
+        program[0x0002] = 0x02; // KIL / JAM (Detiene la CPU)
+
+        // 2. Rutina NMI en $8020 (Índice 0x0020)
+        program[0x0020] = 0xA9; // LDA #$42
+        program[0x0021] = 0x42;
+        program[0x0022] = 0x85; // STA $00 -> Guarda A ($42) en RAM[$0000]
+        program[0x0023] = 0x00;
+        program[0x0024] = 0x40; // RTI
+
+        // 3. Vectores de Interrupción ($FFFA-$FFFD)
+        program[0x7FFA] = 0x20; // NMI Vector Low  ($8020)
+        program[0x7FFB] = 0x80; // NMI Vector High
+        program[0x7FFC] = 0x00; // RESET Vector Low ($8000)
+        program[0x7FFD] = 0x80; // RESET Vector High
+
+        return program;
+
+    }
+
+NOTA: es importante hacer un mock de NMI, pues esto solo se activa por hardware de la PPU
+
+Salida
+$0000 = 42
+$00FD = 0x80
+$01FC = 0x01
+$01FB = 0x25

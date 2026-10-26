@@ -1,0 +1,37 @@
+std::vector<uint8_t> NES::createTestProgram()
+    {
+        std::vector<uint8_t> program(0x8000, 0x00);
+
+        // --- Inicialización ---
+        // $8000: LDX #$00  (X se usará para el VALOR y el OFFSET de la página)
+        program[0x0000] = 0xA2; program[0x0001] = 0x00;
+
+        // --- Bucle Principal (Loop) ---
+        // $8002: TXA       (Transfiere el valor de X al Acumulador A)
+        program[0x0002] = 0x8A;
+        
+        // $8003: STA $0300,X (Guarda A en $0300 + X en modo Absoluto Indexado)
+        // Direccionamiento Little-Endian: $0300 se escribe como 0x00 0x03
+        program[0x0003] = 0x9D; 
+        program[0x0004] = 0x00; // Byte bajo de $0300
+        program[0x0005] = 0x03; // Byte alto de $0300
+        
+        // $8006: INX       (Incrementa X. Al pasar de 0xFF a 0x00, activa flag Z)
+        program[0x0006] = 0xE8;
+        
+        // $8007: BNE $8002 (Branch if Not Equal. Si Z=0, salta a $8002)
+        // Origen tras fetch: $8009. Destino: $8002.
+        // Resta: $8002 - $8009 = -7 bytes (0xF9 en complemento a dos)
+        program[0x0007] = 0xD0; 
+        program[0x0008] = 0xF9;
+
+        // --- Fin del Programa ---
+        // $8009: KIL / JAM / NOP (Detención o trampa)
+        program[0x0009] = 0x02; // Usamos 0x02 (KIL no oficial estándar)
+
+        // Vectores de Reset ($FFFC/$FFFD apuntando a $8000)
+        program[0x7FFC] = 0x00;
+        program[0x7FFD] = 0x80;
+
+        return program;
+    }

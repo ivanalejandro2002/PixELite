@@ -9,6 +9,9 @@
 #include <array>
 #include <cstdint>
 #include <vector>
+#include <NES/PPU/Sprite.h>
+#include <NES/PPU/SpritePixel.h>
+#include <NES/PPU/BackgroundPixel.h>
 
 namespace NES
 {
@@ -19,6 +22,28 @@ namespace NES
                     const std::vector<uint8_t> &chrData,
                     CIRAM::Mirroring mirroring
                 );
+
+                void evaluateSprites(uint8_t scanline);
+                void evaluateSingleSprite(uint8_t index, int targetScanline);
+
+                uint8_t getSpritePixel(
+                    const NES::PPU::Sprite& sprite,
+                    uint8_t x,
+                    uint8_t row
+                );
+
+                NES::PPU::SpritePixel getSpritePixelColor(
+                    const NES::PPU::Sprite& sprite,
+                    uint8_t x,
+                    uint8_t row
+                );
+
+                uint8_t getSpritePaletteColor(
+                    const NES::PPU::Sprite& sprite,
+                    uint8_t pixelValue
+                );
+
+                NES::PPU::BackgroundPixel getBackgroundPixel();
 
                 const Graphics::FrameBuffer& getFramebuffer() const;
                 void debugGenerateTestPattern();
@@ -49,6 +74,8 @@ namespace NES
                 uint8_t readPPUDATA();
                 void writePPUDATA(uint8_t value);
 
+                NES::PPU::Sprite getSprite(uint8_t index) const;
+
                 void reset();
 
                 uint8_t debugPPUCTRL() const;
@@ -68,6 +95,10 @@ namespace NES
                 uint16_t debugCycle() const;
                 int16_t debugScanline() const;
 
+                uint8_t debugScanlineSpriteCount() const;
+
+                const NES::PPU::Sprite& debugScanlineSprite(uint8_t index) const;
+
             private:
                 Bus bus;
 
@@ -81,7 +112,7 @@ namespace NES
 
                 uint8_t OAMADDR = 0;
 
-                std::array<int, 256> OAM{};
+                std::array<uint8_t, 256> OAM{};
 
                 Graphics::FrameBuffer frameBuffer;
 
@@ -109,6 +140,15 @@ namespace NES
                 
                 
                 int16_t scanline = 0;
+                static constexpr uint8_t MAX_SPRITES_PER_SCANLINE = 8;
+
+                NES::PPU::Sprite currentScanlineSprites[8];
+                NES::PPU::Sprite nextScanlineSprites[8];
+                uint8_t currentScanlineSpriteCount = 0;
+                uint8_t nextScanlineSpriteCount = 0;
+                uint8_t spriteEvaluationIndex = 0;
+                bool oddCycle = false;
+
                 uint16_t cycle = 0;
 
                 void incrementCoarseX();
@@ -119,8 +159,57 @@ namespace NES
                 void loadBackgroundShifters();
                 void updateBackgroundShifters();
                 void renderBackgroundPixel();
+                void renderPixel();
 
                 void backgroundFetch();
+
+                std::array<uint8_t, 3> applyColorEmphasis(
+                    const std::array<uint8_t, 3>& color
+                ) const;
+
+                struct EvaluatedSpritePixel {
+                    uint8_t colorIndex = 0;
+                    bool transparent = true;
+                    bool behindBackground = false;
+                    bool isSpriteZero = false; // Útil para el Sprite 0 Hit
+                };
+
+                // MODIFICACIÓN: Se elimina "PPU2C02::" ya que está dentro de la clase
+                EvaluatedSpritePixel getTopSpritePixel(int x, int scanline)
+                {
+                    const bool showSprites = (PPUMASK & 0x10) != 0;
+                    const bool showLeftSprites = (PPUMASK & 0x04) != 0;
+
+                    if (!showSprites) return {0, true, false, false};
+                    if (x < 8 && !showLeftSprites) return {0, true, false, false};
+
+                    const bool is8x16 = (PPUCTRL & 0x20) != 0;
+                    const uint8_t spriteHeight = is8x16 ? 16 : 8;
+
+                    for (uint8_t i = 0; i < currentScanlineSpriteCount; ++i)
+                    {
+                        const auto& sprite = currentScanlineSprites[i];
+                        
+                        int spriteX = sprite.x;
+                        if (x < spriteX || x >= spriteX + 8) continue;
+
+                        uint8_t localX = static_cast<uint8_t>(x - spriteX);
+                        int row = sprite.getRowInSprite(static_cast<uint8_t>(scanline), spriteHeight);
+
+                        if (row < 0) continue;
+
+                        uint8_t pixelValue = getSpritePixel(sprite, localX, static_cast<uint8_t>(row));
+                        if (pixelValue == 0) continue;
+
+                        uint8_t color = getSpritePaletteColor(sprite, pixelValue);
+                        bool behindBg = sprite.behindBackground();
+                        bool isSpriteZero = (i == 0); 
+
+                        return {color, false, behindBg, isSpriteZero};
+                    }
+
+                    return {0, true, false, false};
+                }
 
 
                 static constexpr std::array<

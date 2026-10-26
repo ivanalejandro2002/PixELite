@@ -1,0 +1,70 @@
+std::vector<uint8_t> NES::createTestProgram()
+    {
+        std::vector<uint8_t> program(0x8000, 0x00);
+
+        // ==========================================
+        // 1. CÓDIGO PRINCIPAL (Inicia en $8000)
+        // ==========================================
+        // $8000: SEC         (Activa Carry C=1)
+        program[0x0000] = 0x38;
+
+        // $8001: LDA #$11    (A = 0x11 antes del BRK)
+        program[0x0001] = 0xA9; program[0x0002] = 0x11;
+
+        // $8003: BRK #$00    (BRK ocupa 2 bytes: Opcode 0x00 + Signature/Padding 0x00)
+        // Al ejecutarlo, guardará en la pila el PC de retorno ($8005) y el registro P.
+        program[0x0003] = 0x00; program[0x0004] = 0x00;
+
+        // --- CONTINUACIÓN TRAS EL RTI ---
+        // $8005: STA $0201   (Guarda A modificado por la rutina de interrupción en $0201)
+        program[0x0005] = 0x8D; program[0x0006] = 0x01; program[0x0007] = 0x02;
+
+        // $8008: TSX         (Pasa el SP a X para verificar que volvió a 0xFD)
+        program[0x0008] = 0xBA;
+
+        // $8009: STX $0202   (Guarda el SP final en $0202)
+        program[0x0009] = 0x8E; program[0x000A] = 0x02; program[0x000B] = 0x02;
+
+        // $800C: KIL / JAM   (Fin del programa principal)
+        program[0x000C] = 0x02;
+
+        // ==========================================
+        // 2. RUTINA DE INTERRUPCIÓN IRQ/BRK (Ubicada en $9000 -> Offset 0x1000)
+        // ==========================================
+        // $9000: STA $0200   (Guarda el valor de A original [0x11] en $0200)
+        program[0x1000] = 0x8D; program[0x1001] = 0x00; program[0x1002] = 0x02;
+
+        // $9003: LDA #$99    (Cambia A = 0x99 dentro del Handler)
+        program[0x1003] = 0xA9; program[0x1004] = 0x99;
+
+        // $9005: CLC         (Limpia Carry C=0 para verificar que RTI restaures el P previo)
+        program[0x1005] = 0x18;
+
+        // $9006: RTI         (Retorna de la interrupción: saca P, PC_low, PC_high)
+        program[0x1006] = 0x40;
+
+        // ==========================================
+        // 3. VECTORES DE LA NES (Ubicados al final del archivo)
+        // ==========================================
+        // Vector de Reset ($FFFC/$FFFD -> $8000)
+        program[0x7FFC] = 0x00;
+        program[0x7FFD] = 0x80;
+
+        // Vector de IRQ/BRK ($FFFE/$FFFF -> $9000)
+        program[0x7FFE] = 0x00;
+        program[0x7FFF] = 0x90;
+
+        return program;
+
+    }
+
+
+
+SALIDA:
+$2000 = 0x11
+$2001 = 0x99
+$2002 = 0xFD
+
+$01FD = 0x80
+$01FC = 0x05
+$01FB = 0x35

@@ -24,6 +24,194 @@ namespace NES
         reset();
     }
 
+    void PPU2C02::evaluateSprites(uint8_t scanline)
+    {
+        currentScanlineSpriteCount = 0;
+        
+        if(scanline < 0 || scanline >= 240) return;
+        
+        const uint8_t spriteHeight = (PPUCTRL & 0x20) ? 16:8;
+
+        for(uint8_t i = 0; i < 64; ++i)
+        {
+            const NES::PPU::Sprite sprite = getSprite(i);
+
+            if(!sprite.isOnScanline(
+                static_cast<uint8_t>(scanline),
+                spriteHeight))
+            {
+                continue;
+            }
+
+            if(currentScanlineSpriteCount >= MAX_SPRITES_PER_SCANLINE)
+            {
+                PPUSTATUS |= 0x20;
+                break;
+            }
+
+            currentScanlineSprites[currentScanlineSpriteCount] = sprite;
+            ++currentScanlineSpriteCount;
+        }
+    }
+
+    void PPU2C02::evaluateSingleSprite(uint8_t index, int targetScanline)
+    {
+        const NES::PPU::Sprite sprite = getSprite(index);
+
+        const uint8_t spriteHeight = (PPUCTRL & 0x20)? 16 : 8;
+
+        if(sprite.isOnScanline(static_cast<uint8_t>(targetScanline), spriteHeight))
+        {
+            if(nextScanlineSpriteCount < MAX_SPRITES_PER_SCANLINE)
+            {
+                nextScanlineSprites[nextScanlineSpriteCount] = sprite;
+                ++nextScanlineSpriteCount;
+            }
+            else
+            {
+                PPUSTATUS |= 0x20;
+            }
+        }
+    }
+
+    uint8_t PPU2C02::getSpritePixel(
+        const NES::PPU::Sprite& sprite,
+        uint8_t x,
+        uint8_t row
+    )
+    {
+        const bool is8x16 = (PPUCTRL & 0x20) != 0;
+        const uint8_t spriteHeight = is8x16 ? 16 : 8;
+
+        if (x >= 8 || row >= spriteHeight)
+            return 0;
+
+        uint16_t patternBase;
+        uint8_t tileIndex;
+        uint8_t tileRow;
+
+        if(is8x16)
+        {
+            // En modo 8x16, el bit 0 selecciona la pattern table
+            patternBase = (sprite.tileIndex & 0x01) ? 0x1000 : 0x0000;
+
+            // El primer patrón tiene índice par siempre.
+            tileIndex = sprite.tileIndex & 0xFE;
+
+            // Aquí pertenece el segundo patrón
+            if(row >= 8)
+            {
+                ++tileIndex;
+                tileRow = row - 8;
+            }
+            else
+            {
+                tileRow = row;
+            }
+        }
+        else
+        {
+            // En modo 8x8, el bit 3 de PPUCTRL selecciona la pattern table
+            patternBase = (PPUCTRL & 0x08) ? 0x1000: 0x0000;
+
+            tileIndex = sprite.tileIndex;
+            tileRow = row;
+        }
+
+        const uint16_t tileAddress =
+            patternBase + static_cast<uint16_t>(tileIndex) * 16;
+
+        // Aplicar volteo horizontal.
+        const uint8_t pixelX = sprite.flipHorizontal() ? static_cast<uint8_t>(7 - x) : x;
+
+        // Leer los dos planos de bits.
+        const uint16_t lowAddress = tileAddress + tileRow;
+        const uint16_t highAddress = tileAddress + tileRow + 8;
+
+        const uint8_t lowByte = readVRAM(lowAddress);
+        const uint8_t highByte = readVRAM(highAddress);
+
+        const uint8_t bit = 7 - pixelX;
+
+        const uint8_t lowBit = (lowByte >> bit) & 1;
+        const uint8_t highBit = (highByte >> bit) & 1;
+
+        return lowBit | (highBit << 1);
+    }
+
+    NES::PPU::SpritePixel PPU2C02::getSpritePixelColor(
+        const NES::PPU::Sprite& sprite,
+        uint8_t x,
+        uint8_t row
+    )
+    {
+        const uint8_t pixelValue = getSpritePixel(sprite, x, row);
+
+        // El índice 0 representa un píxel transparente.
+        if (pixelValue == 0)
+            return {0, true};
+
+        const uint8_t color = getSpritePaletteColor(sprite, pixelValue);
+
+        return {color, false};
+    }
+
+    uint8_t PPU2C02::getSpritePaletteColor(
+        const NES::PPU::Sprite& sprite,
+        uint8_t pixelValue
+    )
+    {
+        // El índice 0 representa transparencia.
+        if (pixelValue == 0)
+            return 0;
+
+        const uint8_t paletteIndex = sprite.attributes & 0x03;
+
+        const uint16_t paletteAddress =
+            0x3F10 + paletteIndex * 4 + pixelValue;
+
+        return readVRAM(paletteAddress);
+    }
+
+    NES::PPU::BackgroundPixel PPU2C02::getBackgroundPixel()
+    {
+        const int x = static_cast<int>(cycle) - 1;
+
+        if (x < 0 || x >= Graphics::FrameBuffer::Width)
+            return {0, true};
+
+        uint8_t pixel = 0;
+        uint8_t backgroundPalette = 0;
+
+        const bool showBackGround = (PPUMASK & 0x08) != 0;
+        const bool showLeftBackGround = (PPUMASK & 0x02) != 0;
+
+        if (showBackGround && (x >= 8 || showLeftBackGround))
+        {
+            const uint16_t mux = static_cast<uint16_t>(0x8000 >> fineX);
+
+            pixel = ((bgPatternShiftLow & mux) ? 1 : 0) |
+                    ((bgPatternShiftHigh & mux) ? 2 : 0);
+
+            backgroundPalette =
+                ((bgAttributeShiftLow & mux) ? 1 : 0) |
+                ((bgAttributeShiftHigh & mux) ? 2 : 0);
+        }
+
+        const uint16_t paletteAddress =
+            (pixel == 0)
+                ? 0x3F00
+                : static_cast<uint16_t>(
+                    0x3F00 + backgroundPalette * 4 + pixel);
+
+        const uint8_t colorIndex = readVRAM(paletteAddress) & 0x3F;
+
+        return {
+            colorIndex,
+            pixel == 0
+        };
+    }
+
     const Graphics::FrameBuffer& PPU2C02::getFramebuffer() const
     {
         return frameBuffer;
@@ -194,16 +382,39 @@ namespace NES
         {
             //Limpiar Vblank y flags de sprite
             PPUSTATUS &= 0x1F;
+            nextScanlineSpriteCount = 0;
         }
 
         if(renderScanLine && renderingEnabled)
         {
+
+            if(cycle == 1)
+            {
+                for (int i = 0; i < nextScanlineSpriteCount; ++i)
+                    currentScanlineSprites[i] = nextScanlineSprites[i];
+                
+                currentScanlineSpriteCount = nextScanlineSpriteCount;
+                nextScanlineSpriteCount = 0;
+                spriteEvaluationIndex = 0;
+            }
+
+            if(cycle >= 65 && cycle <= 256)
+            {
+                oddCycle = !oddCycle;
+
+                if(oddCycle && spriteEvaluationIndex < 64)
+                {
+                    evaluateSingleSprite(spriteEvaluationIndex, scanline + 1);
+                    ++spriteEvaluationIndex;
+                }
+            }
+
             const bool backgroundFetchCycle = 
                 (cycle >= 1 && cycle <= 256) ||
                 (cycle >= 321 && cycle <= 336);
 
             if(visibleScanLine && cycle >= 1 && cycle <= 256)
-                renderBackgroundPixel();
+                renderPixel();
 
             if(backgroundFetchCycle)
             {
@@ -445,6 +656,18 @@ namespace NES
         return v;
     }
 
+    NES::PPU::Sprite PPU2C02::getSprite(uint8_t index) const
+    {
+        const uint16_t offset = static_cast<uint16_t>(index) * 4;
+
+        return {
+            OAM[offset],
+            OAM[offset + 1],
+            OAM[offset + 2],
+            OAM[offset + 3]
+        };
+    }
+
     void PPU2C02::reset()
     {
         PPUCTRL = 0;
@@ -475,6 +698,9 @@ namespace NES
 
         scanline = -1;
         cycle = 0;
+
+        spriteEvaluationIndex = 0;
+        oddCycle = false;
     }
 
     uint8_t PPU2C02::debugPPUCTRL() const {return PPUCTRL;}
@@ -490,6 +716,13 @@ namespace NES
 
     uint16_t PPU2C02::debugCycle() const {return cycle;}
     int16_t PPU2C02::debugScanline() const {return scanline;}
+
+    uint8_t PPU2C02::debugScanlineSpriteCount() const {return currentScanlineSpriteCount;}
+
+    const NES::PPU::Sprite& PPU2C02::debugScanlineSprite(uint8_t index) const
+    {
+        return currentScanlineSprites[index];
+    }
 
     void PPU2C02::incrementCoarseX()
     {
@@ -665,10 +898,115 @@ namespace NES
         const uint16_t paletteAddress = 
             (pixel == 0)? 0x3F00: static_cast<uint16_t>(0x3F00 + backgroundPalette * 4 + pixel);
 
-        const uint8_t colorIndex = readVRAM(paletteAddress) & 0x3F;
+        uint8_t colorIndex = readVRAM(paletteAddress) & 0x3F;
 
+        if(PPUMASK & 0x01) colorIndex &= 0x30;
+        
         const auto& color = nesPalette[colorIndex];
 
-        frameBuffer.setPixel(x, y, color[0], color[1], color[2]);
+        const auto emphasizedColor = applyColorEmphasis(color);
+
+        frameBuffer.setPixel(x, y, emphasizedColor[0], emphasizedColor[1], emphasizedColor[2]);
+    }
+
+    void PPU2C02::renderPixel()
+    {
+        const int x = static_cast<int>(cycle) - 1;
+        const int y = static_cast<int>(scanline);
+
+        if (x < 0 || x >= Graphics::FrameBuffer::Width ||
+            y < 0 || y >= Graphics::FrameBuffer::Height)
+            return;
+
+        const bool showBackground = (PPUMASK & 0x08) != 0;
+        const bool showLeftBackground = (PPUMASK & 0x02) != 0;
+        const bool showSprites = (PPUMASK & 0x10) != 0;
+        const bool showLeftSprites = (PPUMASK & 0x04) != 0;
+
+        // Aplicar máscaras de recorte izquierdo (primeras 8 columnas)
+        bool bgVisible = showBackground && (x >= 8 || showLeftBackground);
+        bool spriteVisible = showSprites && (x >= 8 || showLeftSprites);
+
+        // 1. Obtener píxel de fondo
+        NES::PPU::BackgroundPixel bgPixel = getBackgroundPixel();
+        if (!bgVisible) bgPixel.transparent = true;
+
+        // 2. Obtener píxel de sprite prioritario
+        EvaluatedSpritePixel spritePixel = getTopSpritePixel(x, y);
+        if (!spriteVisible) spritePixel.transparent = true;
+
+        // 3. Detección de Sprite 0 Hit
+        if (spritePixel.isSpriteZero && !spritePixel.transparent && !bgPixel.transparent && showBackground && showSprites)
+        {
+            if (x < 255 && x >= 0)
+            {
+                PPUSTATUS |= 0x40; // Activar bit de Sprite 0 Hit
+            }
+        }
+
+        uint8_t finalColorIndex = 0;
+
+        // 4. Multiplexación de prioridades entre Fondo y Sprites
+        if (bgPixel.transparent && spritePixel.transparent)
+        {
+            // Ambos transparentes: Usar el color universal de fondo ($3F00)
+            finalColorIndex = readVRAM(0x3F00) & 0x3F;
+        }
+        else if (bgPixel.transparent && !spritePixel.transparent)
+        {
+            // Fondo transparente, Sprite opaco -> Se dibuja el sprite
+            finalColorIndex = spritePixel.colorIndex;
+        }
+        else if (!bgPixel.transparent && spritePixel.transparent)
+        {
+            // Fondo opaco, Sprite transparente -> Se dibuja el fondo
+            finalColorIndex = bgPixel.color; // bgPixel.color ya contiene el color resuelto
+        }
+        else
+        {
+            // Ambos opacos: Evaluar la prioridad (behindBackground)
+            if (spritePixel.behindBackground)
+            {
+                finalColorIndex = bgPixel.color;
+            }
+            else
+            {
+                finalColorIndex = spritePixel.colorIndex;
+            }
+        }
+
+        // 5. Aplicar escala de grises y énfasis de color
+        if (PPUMASK & 0x01) finalColorIndex &= 0x30;
+
+        const auto& color = nesPalette[finalColorIndex];
+        const auto emphasizedColor = applyColorEmphasis(color);
+
+        frameBuffer.setPixel(x, y, emphasizedColor[0], emphasizedColor[1], emphasizedColor[2]);
+    }
+
+    std::array<uint8_t, 3> PPU2C02::applyColorEmphasis(
+        const std::array<uint8_t, 3>& color) const
+    {
+        constexpr float attenuation = 0.8f;
+
+        const bool emphasizeRed   = (PPUMASK & 0x20) != 0;
+        const bool emphasizeGreen = (PPUMASK & 0x40) != 0;
+        const bool emphasizeBlue  = (PPUMASK & 0x80) != 0;
+
+        auto result = color;
+
+        if (emphasizeRed || emphasizeGreen || emphasizeBlue)
+        {
+            if (!emphasizeRed || (emphasizeGreen && emphasizeBlue))
+                result[0] = static_cast<uint8_t>(result[0] * attenuation);
+
+            if (!emphasizeGreen || (emphasizeRed && emphasizeBlue))
+                result[1] = static_cast<uint8_t>(result[1] * attenuation);
+
+            if (!emphasizeBlue || (emphasizeRed && emphasizeGreen))
+                result[2] = static_cast<uint8_t>(result[2] * attenuation);
+        }
+
+        return result;
     }
 }
