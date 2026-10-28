@@ -14,6 +14,7 @@ namespace NES
             ppuRegisters(ppu)
     {
         cpu.connectBus(&mainBus);
+        ppuRegisters.connectMainBus(&mainBus);
 
         mainBus.addDevice(&ram);
         mainBus.addDevice(&ppuRegisters);
@@ -46,9 +47,16 @@ namespace NES
     void NES::clock()
     {
         ppu.clock();
-        if(masterClock % 3 == 0)
+        if(!mainBus.isDMARunning())
         {
-            cpu.clock();
+            if(masterClock % 3 == 0)
+            {
+                cpu.clock();
+            }
+        }
+        else
+        {
+            mainBus.countDownDMA();
         }
 
         masterClock++;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <NES/Device.h>
+#include <NES/Bus/Bus.h>
 #include <cstdint>
 
 namespace NES
@@ -16,6 +17,8 @@ namespace NES
 
         uint8_t read(uint16_t addr) override;
         void write(uint16_t addr, uint8_t value) override;
+
+        void connectMainBus(Bus *b);
 
     private:
         PPU2C02& ppu;

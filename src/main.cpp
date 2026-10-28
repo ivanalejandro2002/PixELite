@@ -392,8 +392,10 @@ std::array<uint8_t, 4> getPixel(
 )
 {
     const auto& pixels = framebuffer.getPixels();
+    
+    // Multiplicar por BytesPerPixel en lugar de restarlo
     const size_t offset =
-        (static_cast<size_t>(y) * NES::Graphics::FrameBuffer::Width + x)
+        ((static_cast<size_t>(y) * NES::Graphics::FrameBuffer::Width) + x) 
         * NES::Graphics::FrameBuffer::BytesPerPixel;
 
     return {
@@ -408,7 +410,10 @@ void testBackgroundPixelExtraction()
 {
     const auto chr = NES::NES::createTestCHR();
 
+    NES::Bus dummyBus;
     PPU2C02 ppu(chr, NES::CIRAM::Mirroring::Horizontal);
+
+    ppu.connectMainBus(&dummyBus);
 
     ppu.reset();
 
@@ -443,7 +448,9 @@ void testBackgroundShifterPipeline()
 {
     const auto chr = NES::NES::createTestCHR();
 
+    NES::Bus dummyBus;
     PPU2C02 ppu(chr, NES::CIRAM::Mirroring::Horizontal);
+    ppu.connectMainBus(&dummyBus);
 
     ppu.reset();
 
@@ -513,10 +520,12 @@ void testPPUCTRLBackgroundPatternTable()
         chr[0x1000 + row + 8] = 0xFF;
     }
 
+    NES::Bus dummyBus;
     NES::PPU2C02 ppu(
         chr,
         NES::CIRAM::Mirroring::Horizontal
     );
+    ppu.connectMainBus(&dummyBus);
 
     const auto renderFirstPixel = [&ppu](uint8_t control)
     {
@@ -554,10 +563,12 @@ void testPPUMASKBackgroundDisabled()
 {
     auto chr = NES::NES::createTestCHR();
 
+    NES::Bus dummyBus;
     NES::PPU2C02 ppu(
         chr,
         NES::CIRAM::Mirroring::Horizontal
     );
+    ppu.connectMainBus(&dummyBus);
 
     ppu.reset();
 
@@ -588,10 +599,13 @@ void testPPUMASKBackgroundLeftClipping()
 {
     auto chr = NES::NES::createTestCHR();
 
+    NES::Bus dummyBus;
     NES::PPU2C02 ppu(
         chr,
         NES::CIRAM::Mirroring::Horizontal
     );
+
+    ppu.connectMainBus(&dummyBus);
 
     ppu.reset();
 
@@ -620,10 +634,12 @@ void testPPUMASKBackgroundLeftVisible()
 {
     auto chr = NES::NES::createTestCHR();
 
+    NES::Bus dummyBus;
     NES::PPU2C02 ppu(
         chr,
         NES::CIRAM::Mirroring::Horizontal
     );
+    ppu.connectMainBus(&dummyBus);
 
     ppu.reset();
 
@@ -654,10 +670,12 @@ void testPPUMASKColorEmphasis()
 
     auto renderPixel = [&](uint8_t mask)
     {
+        NES::Bus dummyBus;
         NES::PPU2C02 ppu(
             chrData,
             NES::CIRAM::Mirroring::Horizontal
         );
+        ppu.connectMainBus(&dummyBus);
 
         ppu.reset();
 
@@ -716,10 +734,12 @@ void testOAMDataReadWrite()
 {
     const auto chrData = NES::NES::createTestCHR();
 
+    NES::Bus dummyBus;
     NES::PPU2C02 ppu(
         chrData,
         NES::CIRAM::Mirroring::Horizontal
     );
+    ppu.connectMainBus(&dummyBus);
 
     ppu.reset();
 
@@ -747,10 +767,12 @@ void testOAMAddressWraparound()
 {
     const auto chrData = NES::NES::createTestCHR();
 
+    NES::Bus dummyBus;
     NES::PPU2C02 ppu(
         chrData,
         NES::CIRAM::Mirroring::Horizontal
     );
+    ppu.connectMainBus(&dummyBus);
 
     ppu.reset();
 
@@ -799,7 +821,12 @@ void testSpriteDefaultAttributes()
 void testGetSpriteFromOAM()
 {
     const auto chrData = NES::NES::createTestCHR();
-    NES::PPU2C02 ppu(chrData, NES::CIRAM::Mirroring::Horizontal);
+    NES::Bus dummyBus;
+    NES::PPU2C02 ppu(
+        chrData,
+        NES::CIRAM::Mirroring::Horizontal
+    );
+    ppu.connectMainBus(&dummyBus);
     ppu.reset();
 
     // Configurar el segundo sprite: índice 1.
@@ -846,10 +873,12 @@ void testSpriteScanlineEvaluation()
 void testSpriteScanlineLimit()
 {
     const auto chrData = NES::NES::createTestCHR();
+    NES::Bus dummyBus;
     NES::PPU2C02 ppu(
         chrData,
         NES::CIRAM::Mirroring::Horizontal
     );
+    ppu.connectMainBus(&dummyBus);
 
     ppu.reset();
 
@@ -1745,6 +1774,7 @@ int main()
     for(int i = 0x23C0; i < 0x2400; ++i)
     {
         nes.getPPU().writeVRAM(i, 0xE4);
+        // 11 10 01 00
     }
 
     for(int i = 0x03C0; i < 0x0400; ++i)
@@ -1763,8 +1793,8 @@ int main()
             << static_cast<int>(nes.getPPU().readVRAM(0x2400)) << '\n';
 
     
-    nes.getPPU().writePPUSCROLL(100);
-    nes.getPPU().writePPUSCROLL(0);
+    nes.getPPU().writePPUSCROLL(5);
+    nes.getPPU().writePPUSCROLL(10);
 
     //nes.getPPU().debugGenerateBackground();
 
@@ -1786,21 +1816,19 @@ int main()
         nes.getPPU().writeRegister(0x2004, 0xFF); // Todos los Y en 0xFF (invisibles)
     }
 
-    // 2. Ahora configuramos UN ÚNICO sprite limpio en el Índice 0 (OAMADDR = 0x00)
     nes.getPPU().writeRegister(0x2003, 0x00); 
-    nes.getPPU().writeRegister(0x2004, 0x10);   // Y = 50 (en pantalla será la línea 51)
+    nes.getPPU().writeRegister(0x2004, 0x10);   // Y = 16 (en pantalla será la línea 51)
     nes.getPPU().writeRegister(0x2004, 0x00); // Tile Index = 1
-    nes.getPPU().writeRegister(0x2004, 0x00); // Atributos (Paleta 0, al frente)
+    nes.getPPU().writeRegister(0x2004, 0x80); // Atributos (Paleta 0, al frente)
     nes.getPPU().writeRegister(0x2004, 0x3A);   // X = 60
 
-    // 3. Si quisieras añadir un segundo sprite en el Índice 1, OAMADDR debe ser obligatoriamente 0x04:
     nes.getPPU().writeRegister(0x2003, 0x04); 
     nes.getPPU().writeRegister(0x2004, 80);   // Y
     nes.getPPU().writeRegister(0x2004, 0x02); // Tile
     nes.getPPU().writeRegister(0x2004, 0x00); // Atributos
     nes.getPPU().writeRegister(0x2004, 90);   // X
 
-    fillNametable(nes.getPPU(), 0x2800, 1);
+    fillNametable(nes.getPPU(), 0x2800, 3);
 
     for (int i = 0; i < 341 * 262; ++i)
     {

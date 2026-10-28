@@ -23,8 +23,19 @@ namespace NES
                     CIRAM::Mirroring mirroring
                 );
 
+                void connectMainBus(Bus *b);
+
+                void oamDma(uint8_t pageValue);
+
                 void evaluateSprites(uint8_t scanline);
                 void evaluateSingleSprite(uint8_t index, int targetScanline);
+
+                uint8_t getSpritePixel(
+                    const NES::PPU::Sprite& sprite,
+                    uint8_t x,
+                    uint8_t row,
+                    int spriteIndex
+                );
 
                 uint8_t getSpritePixel(
                     const NES::PPU::Sprite& sprite,
@@ -101,6 +112,7 @@ namespace NES
 
             private:
                 Bus bus;
+                Bus *mainBus = nullptr;
 
                 CHRROM chr;
                 CIRAM ciram;
@@ -144,10 +156,16 @@ namespace NES
 
                 NES::PPU::Sprite currentScanlineSprites[8];
                 NES::PPU::Sprite nextScanlineSprites[8];
+                std::array<uint8_t, 8> spritePatternLowBytes{};
+                std::array<uint8_t, 8> spritePatternHighBytes{};
+                std::array<uint8_t, 8> nextSpritePatternLowBytes{};
+                std::array<uint8_t, 8> nextSpritePatternHighBytes{};
                 uint8_t currentScanlineSpriteCount = 0;
                 uint8_t nextScanlineSpriteCount = 0;
                 uint8_t spriteEvaluationIndex = 0;
                 bool oddCycle = false;
+                bool oddFrame = false;
+                uint8_t oamM = 0;
 
                 uint16_t cycle = 0;
 
@@ -174,7 +192,6 @@ namespace NES
                     bool isSpriteZero = false; // Útil para el Sprite 0 Hit
                 };
 
-                // MODIFICACIÓN: Se elimina "PPU2C02::" ya que está dentro de la clase
                 EvaluatedSpritePixel getTopSpritePixel(int x, int scanline)
                 {
                     const bool showSprites = (PPUMASK & 0x10) != 0;
@@ -198,7 +215,7 @@ namespace NES
 
                         if (row < 0) continue;
 
-                        uint8_t pixelValue = getSpritePixel(sprite, localX, static_cast<uint8_t>(row));
+                        uint8_t pixelValue = getSpritePixel(sprite, localX, static_cast<uint8_t>(row), i);
                         if (pixelValue == 0) continue;
 
                         uint8_t color = getSpritePaletteColor(sprite, pixelValue);

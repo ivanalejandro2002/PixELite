@@ -24,6 +24,20 @@ namespace NES
         reset();
     }
 
+    void PPU2C02::connectMainBus(Bus *b) {mainBus = b;}
+
+    void PPU2C02::oamDma(uint8_t pageValue)
+    {
+        uint16_t baseAddress = static_cast<uint16_t>(pageValue) << 8;
+        for(int i = 0; i < 256; ++i)
+        {
+            uint8_t data = mainBus->read(baseAddress + i);
+
+            uint8_t targetIndex = (OAMADDR + i) & 0xFF;
+            OAM[targetIndex] = data;
+        }
+    }
+
     void PPU2C02::evaluateSprites(uint8_t scanline)
     {
         currentScanlineSpriteCount = 0;
@@ -56,20 +70,37 @@ namespace NES
 
     void PPU2C02::evaluateSingleSprite(uint8_t index, int targetScanline)
     {
-        const NES::PPU::Sprite sprite = getSprite(index);
-
         const uint8_t spriteHeight = (PPUCTRL & 0x20)? 16 : 8;
 
-        if(sprite.isOnScanline(static_cast<uint8_t>(targetScanline), spriteHeight))
+        if(nextScanlineSpriteCount < MAX_SPRITES_PER_SCANLINE)
         {
-            if(nextScanlineSpriteCount < MAX_SPRITES_PER_SCANLINE)
+            const NES::PPU::Sprite sprite = getSprite(index);
+
+            if(sprite.isOnScanline(static_cast<uint8_t>(targetScanline), spriteHeight))
             {
                 nextScanlineSprites[nextScanlineSpriteCount] = sprite;
                 ++nextScanlineSpriteCount;
             }
+        }
+        else
+        {
+            uint8_t evalY = OAM[index * 4 + oamM];
+
+            int row = static_cast<int>(targetScanline) - static_cast<int>((evalY + 1) & 0xFF);
+
+            bool onLine = (row >= 0 && row < spriteHeight);
+
+            if(onLine)
+            {
+                // Encontrada una colisión falso positivo por desalineación
+                PPUSTATUS |= 0x20;
+
+                oamM = (oamM + 1) & 0x03;
+            }
             else
             {
-                PPUSTATUS |= 0x20;
+                // Incremento diagonal por bug de desbordamiento de sprites
+                oamM = (oamM + 1) & 0x03;
             }
         }
     }
@@ -130,6 +161,34 @@ namespace NES
 
         const uint8_t lowByte = readVRAM(lowAddress);
         const uint8_t highByte = readVRAM(highAddress);
+
+        const uint8_t bit = 7 - pixelX;
+
+        const uint8_t lowBit = (lowByte >> bit) & 1;
+        const uint8_t highBit = (highByte >> bit) & 1;
+
+        return lowBit | (highBit << 1);
+    }
+
+    uint8_t PPU2C02::getSpritePixel(
+        const NES::PPU::Sprite& sprite,
+        uint8_t x,
+        uint8_t row,
+        int spriteIndex
+    )
+    {
+        const bool is8x16 = (PPUCTRL & 0x20) != 0;
+        const uint8_t spriteHeight = is8x16 ? 16 : 8;
+
+        if (x >= 8 || row >= spriteHeight || spriteIndex < 0 || spriteIndex >= 8)
+            return 0;
+
+        // Obtenemos los bytes que la PPU ya leyó previamente en la ventana 257-320
+        const uint8_t lowByte = spritePatternLowBytes[spriteIndex];
+        const uint8_t highByte = spritePatternHighBytes[spriteIndex];
+
+        // Aplicar volteo horizontal
+        const uint8_t pixelX = sprite.flipHorizontal() ? static_cast<uint8_t>(7 - x) : x;
 
         const uint8_t bit = 7 - pixelX;
 
@@ -376,24 +435,45 @@ namespace NES
         {
             //Vblank
             PPUSTATUS |= 0x80;
+
+            if(PPUCTRL & 0x80)
+            {
+                // flanco de bajada en NMI
+                mainBus->setNMILine(false);
+            }
         }
 
         if(preRenderScanLine && cycle == 1)
         {
-            //Limpiar Vblank y flags de sprite
+            // Limpiar Vblank y flags de sprite
             PPUSTATUS &= 0x1F;
             nextScanlineSpriteCount = 0;
+            oamM = 0;
+
+            // Liberación de la línea de NMI
+            mainBus->setNMILine(true);
         }
 
         if(renderScanLine && renderingEnabled)
         {
-
             if(cycle == 1)
             {
                 for (int i = 0; i < nextScanlineSpriteCount; ++i)
+                {
                     currentScanlineSprites[i] = nextScanlineSprites[i];
+                    spritePatternLowBytes[i] = nextSpritePatternLowBytes[i];
+                    spritePatternHighBytes[i] = nextSpritePatternHighBytes[i];
+                }
                 
                 currentScanlineSpriteCount = nextScanlineSpriteCount;
+                
+                // Limpiar el resto de los búferes activos si hay menos sprites
+                for (int i = nextScanlineSpriteCount; i < 8; ++i)
+                {
+                    spritePatternLowBytes[i] = 0;
+                    spritePatternHighBytes[i] = 0;
+                }
+
                 nextScanlineSpriteCount = 0;
                 spriteEvaluationIndex = 0;
             }
@@ -406,6 +486,71 @@ namespace NES
                 {
                     evaluateSingleSprite(spriteEvaluationIndex, scanline + 1);
                     ++spriteEvaluationIndex;
+                }
+            }
+
+            // Ciclos 257 a 320: Lectura anticipada de patrones para la SIGUIENTE scanline (scanline + 1)
+            if (renderScanLine && cycle >= 257 && cycle <= 320)
+            {
+                int fetchStep = (cycle - 257) % 8;
+                int spriteIndex = (cycle - 257) / 8;
+                int targetScanline = scanline + 1;
+
+                if (spriteIndex < nextScanlineSpriteCount)
+                {
+                    const auto& sprite = nextScanlineSprites[spriteIndex];
+                    const bool is8x16 = (PPUCTRL & 0x20) != 0;
+                    const uint8_t spriteHeight = is8x16 ? 16 : 8;
+
+                    int row = sprite.getRowInSprite(static_cast<uint8_t>(targetScanline), spriteHeight);
+
+                    if (row >= 0 && row < spriteHeight)
+                    {
+                        uint16_t patternBase = 0;
+                        uint8_t tileIndex = sprite.tileIndex;
+                        uint8_t tileRow = static_cast<uint8_t>(row);
+
+                        if (is8x16)
+                        {
+                            patternBase = (tileIndex & 0x01) ? 0x1000 : 0x0000;
+                            tileIndex &= 0xFE;
+                            if (tileRow >= 8)
+                            {
+                                ++tileIndex;
+                                tileRow -= 8;
+                            }
+                        }
+                        else
+                        {
+                            patternBase = (PPUCTRL & 0x08) ? 0x1000 : 0x0000;
+                        }
+
+                        const uint16_t tileAddress = patternBase + static_cast<uint16_t>(tileIndex) * 16;
+
+                        if (fetchStep == 5)
+                        {
+                            const uint16_t lowAddress = tileAddress + tileRow;
+                            nextSpritePatternLowBytes[spriteIndex] = readVRAM(lowAddress);
+                        }
+                        else if (fetchStep == 7)
+                        {
+                            const uint16_t highAddress = tileAddress + tileRow + 8;
+                            nextSpritePatternHighBytes[spriteIndex] = readVRAM(highAddress);
+                        }
+                    }
+                    else
+                    {
+                        nextSpritePatternLowBytes[spriteIndex] = 0;
+                        nextSpritePatternHighBytes[spriteIndex] = 0;
+                    }
+                }
+                else
+                {
+                    if (spriteIndex < 8)
+                    {
+                        nextSpritePatternLowBytes[spriteIndex] = 0;
+                        nextSpritePatternHighBytes[spriteIndex] = 0;
+                    }
                 }
             }
 
@@ -429,14 +574,23 @@ namespace NES
             if(preRenderScanLine && cycle >= 280 && cycle <= 304) transferAddressY();
         }
 
+        uint16_t cyclesPerScanline = 341;
 
-        if(cycle >= 341)
+        if(scanline == -1 && renderingEnabled && oddFrame)
+        {
+            cyclesPerScanline = 340;
+        }
+
+        if(cycle >= cyclesPerScanline)
         {
             cycle = 0;
             ++scanline;
 
             if(scanline > 260)
+            {
                 scanline = -1;
+                oddFrame = !oddFrame;
+            }
         }
     }
 
@@ -532,7 +686,14 @@ namespace NES
 
     void PPU2C02::writePPUCTRL(uint8_t value)
     {
+        uint8_t oldCtrl = PPUCTRL;
         PPUCTRL = value;
+
+        if(!(oldCtrl & 0x80) && (value & 0x80) && (PPUSTATUS & 0x80))
+        {
+            // Disparar NMI inmediata
+            mainBus->setNMILine(false);
+        }
 
         t &= 0xF3FF;
         t |= (static_cast<uint16_t>(value) & 0x03) << 10;
@@ -550,6 +711,12 @@ namespace NES
     uint8_t PPU2C02::readPPUSTATUS()
     {
         uint8_t value = PPUSTATUS;
+
+        if(value & 0x80)
+        {
+            // Liberación NMI
+            mainBus->setNMILine(true);
+        }
 
         PPUSTATUS &= 0x7F;
         writeToggle = false;
@@ -701,6 +868,9 @@ namespace NES
 
         spriteEvaluationIndex = 0;
         oddCycle = false;
+        oddFrame = false;
+
+        oamM = 0;
     }
 
     uint8_t PPU2C02::debugPPUCTRL() const {return PPUCTRL;}
@@ -927,15 +1097,15 @@ namespace NES
         bool bgVisible = showBackground && (x >= 8 || showLeftBackground);
         bool spriteVisible = showSprites && (x >= 8 || showLeftSprites);
 
-        // 1. Obtener píxel de fondo
+        // Obtener píxel de fondo
         NES::PPU::BackgroundPixel bgPixel = getBackgroundPixel();
         if (!bgVisible) bgPixel.transparent = true;
 
-        // 2. Obtener píxel de sprite prioritario
+        // Obtener píxel de sprite prioritario
         EvaluatedSpritePixel spritePixel = getTopSpritePixel(x, y);
         if (!spriteVisible) spritePixel.transparent = true;
 
-        // 3. Detección de Sprite 0 Hit
+        // Detección de Sprite 0 Hit
         if (spritePixel.isSpriteZero && !spritePixel.transparent && !bgPixel.transparent && showBackground && showSprites)
         {
             if (x < 255 && x >= 0)
@@ -946,7 +1116,7 @@ namespace NES
 
         uint8_t finalColorIndex = 0;
 
-        // 4. Multiplexación de prioridades entre Fondo y Sprites
+        // Multiplexación de prioridades entre Fondo y Sprites
         if (bgPixel.transparent && spritePixel.transparent)
         {
             // Ambos transparentes: Usar el color universal de fondo ($3F00)
@@ -975,7 +1145,7 @@ namespace NES
             }
         }
 
-        // 5. Aplicar escala de grises y énfasis de color
+        // Aplicar escala de grises y énfasis de color
         if (PPUMASK & 0x01) finalColorIndex &= 0x30;
 
         const auto& color = nesPalette[finalColorIndex];

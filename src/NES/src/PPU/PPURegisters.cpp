@@ -11,8 +11,7 @@ namespace NES
 
     bool PPURegisters::handles(uint16_t addr) const
     {
-        return addr >= 0x2000 &&
-               addr <= 0x3FFF;
+        return (addr >= 0x2000 && addr <= 0x3FFF) || addr == 0x4014;
     }
 
     uint8_t PPURegisters::read(uint16_t addr)
@@ -25,6 +24,14 @@ namespace NES
         uint8_t value
     )
     {
+        if(addr == 0x4014)
+        {
+            ppu.oamDma(value);
+            ppu.mainBus.startDMA(513);
+            return;
+        }
         ppu.writeRegister(addr, value);
     }
+
+    void PPURegisters::connectMainBus(Bus *bus) {ppu.connectMainBus(bus);}
 }
