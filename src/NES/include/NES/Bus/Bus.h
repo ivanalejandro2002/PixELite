@@ -54,6 +54,10 @@ namespace NES
             void setNMILine(const bool &state);
             void setIRQLine(const bool &state);
             void finishNMI();
+
+            bool isDMARunning();
+            void countDownDMA();
+            void startDMA(uint16_t cycles);
         private:
             std::vector<Device *> devices;
             std::vector<AddressMask> addressMasks;
@@ -70,5 +74,8 @@ namespace NES
             bool NMILine;
             bool IRQLine;
             bool NMIActivation;
+
+            bool DMAInProgress;
+            uint16_t remainingDMACycles;
     };
 }

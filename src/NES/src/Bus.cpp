@@ -28,6 +28,9 @@ namespace NES
     {
         NMILine = IRQLine = true;
         NMIActivation = false;
+
+        DMAInProgress = false;
+        remainingDMACycles = 0;
     }
 
     void Bus::addDevice(Device *device)
@@ -54,6 +57,9 @@ namespace NES
     {
         NMILine = IRQLine = 1;
         NMIActivation = 0;
+
+        DMAInProgress = false;
+        remainingDMACycles = 0;
     }
 
     bool Bus::getNMILine()
@@ -90,6 +96,22 @@ namespace NES
         NMIActivation = 0;
     }
 
+    bool Bus::isDMARunning() {return DMAInProgress;}
+    
+    void Bus::countDownDMA()
+    {
+        remainingDMACycles --;
+        if(remainingDMACycles == 0)
+        {
+            DMAInProgress = false;
+        }
+    }
+
+    void Bus::startDMA(uint16_t _cycles)
+    {
+        DMAInProgress = true;
+        remainingDMACycles = _cycles;
+    }
 
 
     uint16_t Bus::normalizeAddress(uint16_t addr) const

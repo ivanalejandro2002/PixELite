@@ -88,6 +88,7 @@ add_subdirectory(src/NES)
 
 add_executable(TT
     src/main.cpp
+    src/NES/src/Graphics/Renderer.cpp
 )
 
 # =========================================

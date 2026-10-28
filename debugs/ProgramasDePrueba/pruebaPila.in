@@ -1,0 +1,101 @@
+std::vector<uint8_t> NES::createTestProgram()
+    {
+        std::vector<uint8_t> program(0x8000, 0x00);
+
+        // ==========================================
+        // 1. INICIALIZACIÓN Y CARGA DE VALORES TEST
+        // ==========================================
+        // $8000: SEC         (Activa Flag C=1)
+        program[0x0000] = 0x38;
+
+        // $8001: LDA #$42    (A = 0x42)
+        program[0x0001] = 0xA9; program[0x0002] = 0x42;
+
+        // $8003: LDX #$99    (X = 0x99)
+        program[0x0003] = 0xA2; program[0x0004] = 0x99;
+
+        // ==========================================
+        // 2. OPERACIONES PUSH (Pila inicia con SP = 0xFD)
+        // ==========================================
+        // $8005: PHA         (Push A -> Escribe 0x42 en $01FD, SP pasa a 0xFC)
+        program[0x0005] = 0x48;
+
+        // $8006: PHP         (Push Flags -> Escribe P en $01FC, SP pasa a 0xFB)
+        program[0x0006] = 0x08;
+
+        // $8007: TXA         (A = X = 0x99)
+        program[0x0007] = 0x8A;
+
+        // $8008: PHA         (Push A -> Escribe 0x99 en $01FB, SP pasa a 0xFA)
+        program[0x0008] = 0x48;
+
+        // ==========================================
+        // 3. LIMPIEZA / CORRUPCIÓN DE REGISTROS
+        // ==========================================
+        // $8009: CLC         (Limpia Flag C=0)
+        program[0x0009] = 0x18;
+
+        // $800A: LDA #$00    (A = 0x00)
+        program[0x000A] = 0xA9; program[0x000B] = 0x00;
+
+        // $800C: TAX         (X = 0x00)
+        program[0x000C] = 0xAA;
+
+        // ==========================================
+        // 4. OPERACIONES POP / PULL
+        // ==========================================
+        // $800D: PLA         (Lee 0x99 de $01FB, SP pasa a 0xFB)
+        program[0x000D] = 0x68;
+
+        // $800E: TAY         (Y = 0x99)
+        program[0x000E] = 0xA8;
+
+        // $800F: PLP         (Lee P de $01FC, restaura C=1, SP pasa a 0xFC)
+        program[0x000F] = 0x28;
+
+        // $8010: PLA         (Lee 0x42 de $01FD, SP pasa a 0xFD)
+        program[0x0010] = 0x68;
+
+        // $8011: TAX         (X = 0x42)
+        program[0x0011] = 0xAA;
+
+        // ==========================================
+        // 5. VOLCADO DE REGISTROS A RAM ($0200+)
+        // ==========================================
+        // $8012: STA $0200   (Guarda A en $0200)
+        program[0x0012] = 0x8D; program[0x0013] = 0x00; program[0x0014] = 0x02;
+
+        // $8015: STX $0201   (Guarda X en $0201)
+        program[0x0015] = 0x8E; program[0x0016] = 0x01; program[0x0017] = 0x02;
+
+        // $8018: STY $0202   (Guarda Y en $0202)
+        program[0x0018] = 0x8C; program[0x0019] = 0x02; program[0x001A] = 0x02;
+
+        // $801B: TSX         (Pasa el Stack Pointer SP a X)
+        program[0x001B] = 0xBA;
+
+        // $801C: STX $0203   (Guarda el SP final en $0203)
+        program[0x001C] = 0x8E; program[0x001D] = 0x03; program[0x001E] = 0x02;
+
+        // $801F: PHP         (Push P temporal a $01FD, SP pasa a 0xFC)
+        program[0x001F] = 0x08;
+
+        // $8020: PLA         (Pop a A desde $01FD, SP vuelve a 0xFD)
+        program[0x0020] = 0x68;
+
+        // $8021: STA $0204   (Guarda el registro P en $0204)
+        program[0x0021] = 0x8D; program[0x0022] = 0x04; program[0x0023] = 0x02;
+
+        // ==========================================
+        // 6. FIN DEL PROGRAMA
+        // ==========================================
+        // $8024: KIL / JAM
+        program[0x0024] = 0x02;
+
+        // Vectores de Reset ($FFFC/$FFFD apuntando a $8000)
+        program[0x7FFC] = 0x00;
+        program[0x7FFD] = 0x80;
+
+        return program;
+
+    }
