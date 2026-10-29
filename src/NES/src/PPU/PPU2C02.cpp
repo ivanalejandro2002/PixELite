@@ -590,6 +590,8 @@ namespace NES
             {
                 scanline = -1;
                 oddFrame = !oddFrame;
+
+                frameComplete = true;
             }
         }
     }
@@ -835,6 +837,8 @@ namespace NES
         };
     }
 
+    Bus* PPU2C02::getMainBus() const {return mainBus;}
+
     void PPU2C02::reset()
     {
         PPUCTRL = 0;
@@ -871,7 +875,12 @@ namespace NES
         oddFrame = false;
 
         oamM = 0;
+
+        frameComplete = 0;
     }
+
+    bool PPU2C02::isFrameComplete() const {return frameComplete;}
+    void PPU2C02::clearFrameComplete() {frameComplete = false;}
 
     uint8_t PPU2C02::debugPPUCTRL() const {return PPUCTRL;}
     uint8_t PPU2C02::debugPPUMASK() const {return PPUMASK;}

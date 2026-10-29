@@ -86,8 +86,12 @@ namespace NES
                 void writePPUDATA(uint8_t value);
 
                 NES::PPU::Sprite getSprite(uint8_t index) const;
+                Bus* getMainBus() const;
 
                 void reset();
+
+                bool isFrameComplete() const;
+                void clearFrameComplete();
 
                 uint8_t debugPPUCTRL() const;
                 uint8_t debugPPUMASK() const;
@@ -152,6 +156,7 @@ namespace NES
                 
                 
                 int16_t scanline = 0;
+                bool frameComplete = false;
                 static constexpr uint8_t MAX_SPRITES_PER_SCANLINE = 8;
 
                 NES::PPU::Sprite currentScanlineSprites[8];

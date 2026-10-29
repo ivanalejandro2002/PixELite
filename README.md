@@ -17,7 +17,10 @@ libxss-dev \
 libwayland-dev \
 wayland-protocols \
 libegl1-mesa-dev \
-libgl1-mesa-dev
+libgl1-mesa-dev \
+libasound2-dev \
+libpulse-dev \
+libpipewire-0.3-dev \
 ```
 
 # Clonación del repositorio
