@@ -17,6 +17,8 @@ namespace NES
 
             void push(float sample);
             size_t read(float *dest, size_t maxSamples);
+            size_t readResampled(float *dest, size_t requestedSamples, double ratio, double& fractionalPosition);
+            void clear();
             size_t available() const;
     };
 }
