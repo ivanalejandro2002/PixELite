@@ -1593,14 +1593,11 @@ NES::AudioRingBuffer audioRingBuffer(44100);
 void runEmulationFrame(
     NES::NES& nes,
     NES::APU& apu,
-    std::vector<float>& samples
+    NES::AudioRingBuffer& ringBuffer
 )
 {
-    samples.clear();
-
-    // Variables estáticas para mantener el estado del filtro entre muestras y fotogramas
+    // Variables estáticas para mantener el estado del filtro entre muestras
     static float lowPassOutput = 0.0f;
-    // Un alfa de 0.3 a 0.5 suele suavizar los armónicos agresivos manteniendo el brillo del chip
     constexpr float ALPHA = 0.4f; 
 
     while (!nes.getPPU().isFrameComplete())
@@ -1617,10 +1614,11 @@ void runEmulationFrame(
                 ? apu.getTestToneSample()
                 : apu.getAudioSample();
 
-            // --- APLICAR FILTRO PASA-BAJAS (Anti-aliasing / Suavizado) ---
+            // --- APLICAR FILTRO PASA-BAJAS ---
             lowPassOutput = lowPassOutput + ALPHA * (rawSample - lowPassOutput);
 
-            samples.push_back(lowPassOutput);
+            // Inyectar directamente al Ring Buffer (elástico y seguro)
+            ringBuffer.push(lowPassOutput); // *Nota: Cambia .push() por .write() si tu clase usa ese nombre
         }
     }
 
@@ -1962,8 +1960,16 @@ int main()
     }
 
 
-    std::vector<float> frameSamples;
-    frameSamples.reserve(800);
+    for (int i = 0; i < 5; ++i) {
+        runEmulationFrame(nes, nes.getAPU(), audioRingBuffer);
+    }
+
+    const size_t targetBufferSize = 2048; 
+    double drcRatio = 1.0;
+    double srcPosition = 0.0;
+
+    constexpr int samplesPerFrame = 734;
+    std::vector<float> fixedFrameSamples(samplesPerFrame);
 
     auto nextFrameTime = Clock::now();
 
@@ -1972,6 +1978,7 @@ int main()
         auto frameStart = std::chrono::high_resolution_clock::now();
         SDL_Event event;
 
+        // RESTAURADO: Procesar eventos de la ventana para que no se congele
         while(SDL_PollEvent(&event))
         {
             if(event.type == SDL_EVENT_QUIT)
@@ -1983,6 +1990,7 @@ int main()
             {
                 if (event.key.key == SDLK_SPACE)
                 {
+
                     uint8_t status = nes.cpuRead(0x4015);
                     nes.cpuWrite(0x4015, status & 0xFE); 
                     triggerTestPulseChannel(nes);
@@ -1990,31 +1998,70 @@ int main()
             }
         }
 
-        // Ejecutar emulación para este fotograma
-        runEmulationFrame(nes, nes.getAPU(), frameSamples);
+        runEmulationFrame(nes, nes.getAPU(), audioRingBuffer);
 
-        // Enviar el bloque completo de muestras directamente a SDL3 de forma limpia
-        if (!frameSamples.empty())
+        size_t currentAvailable = audioRingBuffer.available();
+        if (currentAvailable > 256) 
         {
-            SDL_PutAudioStreamData(
-                audioStream,
-                frameSamples.data(),
-                static_cast<int>(frameSamples.size() * sizeof(float))
-            );
+            double error = static_cast<double>(currentAvailable) - static_cast<double>(targetBufferSize);
+            
+            // ZONA MUERTA: Evita que el tono oscile (vibrato)
+            if (std::abs(error) > 150) 
+            {
+                constexpr double gain = 0.00001; // Ganancia suave
+                drcRatio = 1.0 + (error * gain);
+                
+                // Rango estricto para que los cambios de tono no se noten
+                drcRatio = std::clamp(drcRatio, 0.995, 1.005); 
+            }
+            else 
+            {
+                // Regresar suavemente al ratio neutral (1.0) en la zona segura
+                drcRatio = drcRatio * 0.98 + 1.0 * 0.02;
+            }
         }
 
-        // Renderizar gráficos y sincronizar ventana
+        // Extraer muestras con resampleo DRC
+        size_t extracted = audioRingBuffer.readResampled(
+            fixedFrameSamples.data(), 
+            samplesPerFrame, 
+            drcRatio, 
+            srcPosition
+        );
+
+        // Enviar a SDL3
+        if (extracted > 0)
+        {
+            int queuedBytes = SDL_GetAudioStreamQueued(audioStream);
+            if (queuedBytes < 16384) 
+            {
+                SDL_PutAudioStreamData(
+                    audioStream,
+                    fixedFrameSamples.data(),
+                    static_cast<int>(extracted * sizeof(float))
+                );
+            }
+        }
+
+        // Renderizado y sincronización gráfica
         renderer.renderFrame(nes.getPPU().getFramebuffer());
         SDL_GL_SwapWindow(window);
-
-        // Limitador de velocidad a 60.098 FPS (método clásico de delta por elapsed)
-        auto frameEnd = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> elapsed = frameEnd - frameStart;
-        double targetFrameTime = 1000.0 / 60.098; 
         
-        if (elapsed.count() < targetFrameTime)
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(targetFrameTime - elapsed.count())));
+        // --- LIMITADOR DE VELOCIDAD ULTRA SUAVE (Evita que la CPU se dispare al 100%) ---
+        auto now = Clock::now();
+        
+        // Si nos atrasamos más de 100ms (por un tirón o carga de los ventiladores), 
+        // reajustamos el reloj para evitar que intente "acelerar" de golpe y sature la CPU.
+        if (now > nextFrameTime + std::chrono::milliseconds(100)) {
+            nextFrameTime = now;
+        }
+
+        nextFrameTime += std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+            std::chrono::duration<double, std::milli>(1000.0 / 60.098)
+        );
+        
+        if (nextFrameTime > Clock::now()) {
+            std::this_thread::sleep_until(nextFrameTime);
         }
     }
     closeAudio();
