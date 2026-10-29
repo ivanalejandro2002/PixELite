@@ -8,6 +8,9 @@
 #include <Graphics/Renderer.h>
 #include <cassert>
 
+#include <chrono>
+#include <thread>
+
 void fillNametable(NES::PPU2C02& ppu, uint16_t base, uint8_t tile)
 {
     for (int y = 0; y < 30; ++y)
@@ -1546,10 +1549,120 @@ void testBackgroundPixel()
     std::cout << "testBackgroundPixel: OK\n";
 }
 
+// Variables globales o dentro de tu clase de la aplicación/emulador
+SDL_AudioStream* audioStream = nullptr;
+
+bool initAudio()
+{
+    SDL_AudioSpec spec;
+    spec.freq = 44100;          // Frecuencia de muestreo estándar
+    spec.format = SDL_AUDIO_F32; // Muestras en float de 32 bits
+    spec.channels = 1;          // Mono (la NES es nativamente monofónica)
+
+    // SDL3 abre el dispositivo y crea el stream de audio en un solo paso
+    audioStream = SDL_OpenAudioDeviceStream(
+        SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, 
+        &spec, 
+        nullptr, // Sin callback (modelo de "push")
+        nullptr
+    );
+
+    if (!audioStream)
+    {
+        SDL_Log("¡Fallo crítico al abrir el stream de audio! Error: %s", SDL_GetError());
+        return false;
+    }
+
+    // Reanudar el stream de audio para permitir la reproducción
+    SDL_ResumeAudioStreamDevice(audioStream);
+    return true;
+}
+
+// Constantes de temporización
+constexpr double CPU_CLOCK_RATE = 1789773.5; // Frecuencia NTSC exacta
+constexpr double SAMPLE_RATE = 44100.0;
+constexpr double CYCLES_PER_SAMPLE = CPU_CLOCK_RATE / SAMPLE_RATE;
+constexpr double TARGET_FPS = 60.098;
+const auto frameDuration = std::chrono::duration<double>(1.0 / TARGET_FPS);
+using Clock = std::chrono::steady_clock;
+
+double sampleAccumulator = 0.0;
+NES::AudioRingBuffer audioRingBuffer(44100);
+
+// Dentro de tu bucle de ejecución por fotograma (ej. 60 FPS):
+void runEmulationFrame(
+    NES::NES& nes,
+    NES::APU& apu,
+    std::vector<float>& samples
+)
+{
+    samples.clear();
+
+    // Variables estáticas para mantener el estado del filtro entre muestras y fotogramas
+    static float lowPassOutput = 0.0f;
+    // Un alfa de 0.3 a 0.5 suele suavizar los armónicos agresivos manteniendo el brillo del chip
+    constexpr float ALPHA = 0.4f; 
+
+    while (!nes.getPPU().isFrameComplete())
+    {
+        nes.clock(); 
+
+        sampleAccumulator += (1.0 / 3.0);
+
+        if (sampleAccumulator >= CYCLES_PER_SAMPLE)
+        {
+            sampleAccumulator -= CYCLES_PER_SAMPLE;
+
+            float rawSample = apu.testMode
+                ? apu.getTestToneSample()
+                : apu.getAudioSample();
+
+            // --- APLICAR FILTRO PASA-BAJAS (Anti-aliasing / Suavizado) ---
+            lowPassOutput = lowPassOutput + ALPHA * (rawSample - lowPassOutput);
+
+            samples.push_back(lowPassOutput);
+        }
+    }
+
+    nes.getPPU().clearFrameComplete();
+}
+
+void closeAudio()
+{
+    if (audioStream)
+    {
+        SDL_DestroyAudioStream(audioStream);
+        audioStream = nullptr;
+    }
+    SDL_QuitSubSystem(SDL_INIT_AUDIO);
+}
+
+void triggerTestPulseChannel(NES::NES& nes)
+{
+    // Habilitar el canal de pulso 1 en el registro de control de la APU ($4015)
+    nes.cpuWrite(0x4015, 0x01); // Bit 0 = Pulse 1 ENABLE
+
+    // Configurar Pulse 1 ($4000 - $4003)
+    nes.cpuWrite(0x4000, 0x9F); // Ciclo de trabajo al 50%, volumen constante al máximo
+    nes.cpuWrite(0x4001, 0x00); // Sin sweep
+    
+    // Frecuencia (La de 440 Hz con timer = 0x00FD)
+    nes.cpuWrite(0x4002, 0xFD); // Timer low (bits 0-7)
+    
+    // Para obtener una duración de ~2 segundos (~128 frames de longitud):
+    // El índice en la tabla que da 128 (o un valor cercano como 96 o 192) se coloca en los bits 3-7 de $4003.
+    // Usando el índice binario correspondiente (por ejemplo, 0x1A << 3 = 0xD0 o probando con un índice que active una duración alta).
+    // Nota: Si colocas 0x00 en $4003, el índice es 0, lo que da una duración muy corta (10 frames / ~0.16 segundos).
+    
+    // Probemos cargando un índice de duración larga en $4003 (ej. índice 18 que da 96 frames, o índice 24 que da 192 frames):
+    uint8_t lengthIndex = 10; // Esto selecciona un valor alto en la LENGTH_TABLE
+    nes.cpuWrite(0x4003, (lengthIndex << 3)); // Carga el índice en los bits 3-7 y reinicia el faseo/envolvente
+}
+
 int main()
 {
     // Inicializar SDL3.
-    if(!SDL_Init(SDL_INIT_VIDEO))
+    if(!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
     {
         std::cerr << "Error al inicializar SDL3: "
                   << SDL_GetError() << '\n';
@@ -1631,6 +1744,8 @@ int main()
         SDL_Quit();
         return 1;
     }
+
+    initAudio();
 
     NES::NES nes;
 
@@ -1788,13 +1903,9 @@ int main()
     fillNametable(nes.getPPU(), 0x2000, 3);
     fillNametable(nes.getPPU(), 0x2800, 3);
 
-    std::cout << std::hex
-            << static_cast<int>(nes.getPPU().readVRAM(0x2000)) << '\n'
-            << static_cast<int>(nes.getPPU().readVRAM(0x2400)) << '\n';
-
     
-    nes.getPPU().writePPUSCROLL(5);
-    nes.getPPU().writePPUSCROLL(10);
+    nes.getPPU().writePPUSCROLL(0);
+    nes.getPPU().writePPUSCROLL(0);
 
     //nes.getPPU().debugGenerateBackground();
 
@@ -1837,9 +1948,28 @@ int main()
 
     nes.memoryDebug();
 
+    // Definimos un tamaño de búfer ideal (ej. el equivalente a ~3 fotogramas de audio)
+    // 44100 Hz / 60.098 FPS = ~734 muestras por frame. 
+    // 3 frames * 734 muestras * 4 bytes (float) = ~8808 bytes.
+    const size_t TARGET_BUFFER_BYTES = 12000;
+
+    nes.getAPU().deactivateTestMode();
+
+    if (audioStream == nullptr)
+    {
+        SDL_Log("¡CRÍTICO: audioStream es nullptr antes de arrancar el bucle!");
+        return -1; // O abortar
+    }
+
+
+    std::vector<float> frameSamples;
+    frameSamples.reserve(800);
+
+    auto nextFrameTime = Clock::now();
 
     while(running)
     {
+        auto frameStart = std::chrono::high_resolution_clock::now();
         SDL_Event event;
 
         while(SDL_PollEvent(&event))
@@ -1848,15 +1978,47 @@ int main()
             {
                 running = false;
             }
+
+            if (event.type == SDL_EVENT_KEY_DOWN)
+            {
+                if (event.key.key == SDLK_SPACE)
+                {
+                    uint8_t status = nes.cpuRead(0x4015);
+                    nes.cpuWrite(0x4015, status & 0xFE); 
+                    triggerTestPulseChannel(nes);
+                }
+            }
         }
 
-        // Dibujar el framebuffer de prueba.
-        renderer.renderFrame(
-            nes.getPPU().getFramebuffer()
-        );
+        // Ejecutar emulación para este fotograma
+        runEmulationFrame(nes, nes.getAPU(), frameSamples);
 
+        // Enviar el bloque completo de muestras directamente a SDL3 de forma limpia
+        if (!frameSamples.empty())
+        {
+            SDL_PutAudioStreamData(
+                audioStream,
+                frameSamples.data(),
+                static_cast<int>(frameSamples.size() * sizeof(float))
+            );
+        }
+
+        // Renderizar gráficos y sincronizar ventana
+        renderer.renderFrame(nes.getPPU().getFramebuffer());
         SDL_GL_SwapWindow(window);
+
+        // Limitador de velocidad a 60.098 FPS (método clásico de delta por elapsed)
+        auto frameEnd = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> elapsed = frameEnd - frameStart;
+        double targetFrameTime = 1000.0 / 60.098; 
+        
+        if (elapsed.count() < targetFrameTime)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(targetFrameTime - elapsed.count())));
+        }
     }
+    closeAudio();
+    nes.memoryDebug();
 
     // Liberar recursos mientras OpenGL sigue activo.
     renderer.destroy();

@@ -27,7 +27,7 @@ namespace NES
         if(addr == 0x4014)
         {
             ppu.oamDma(value);
-            ppu.mainBus.startDMA(513);
+            ppu.getMainBus()->startDMA(513);
             return;
         }
         ppu.writeRegister(addr, value);

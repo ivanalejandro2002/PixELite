@@ -11,13 +11,15 @@ namespace NES
             mainBus(),
             cpu(),
             ppu(createTestCHR(), CIRAM::Mirroring::Horizontal),
-            ppuRegisters(ppu)
+            ppuRegisters(ppu),
+            apu(mainBus)
     {
         cpu.connectBus(&mainBus);
         ppuRegisters.connectMainBus(&mainBus);
 
         mainBus.addDevice(&ram);
         mainBus.addDevice(&ppuRegisters);
+        mainBus.addDevice(&apu);
 
         mainBus.addAddressMask({
             0x0000,
@@ -52,6 +54,8 @@ namespace NES
             if(masterClock % 3 == 0)
             {
                 cpu.clock();
+                apu.clock();
+
             }
         }
         else
@@ -76,6 +80,11 @@ namespace NES
     const PPU2C02& NES::getPPU() const
     {
         return ppu;
+    }
+
+    APU& NES::getAPU()
+    {
+        return apu;
     }
 
     PPU2C02& NES::getPPU()
@@ -189,84 +198,41 @@ namespace NES
         mainBus.setIRQLine(true);
     }
 
+    void NES::cpuWrite(uint16_t address, uint8_t value)
+    {
+        mainBus.write(address, value);
+    }
+
+    uint8_t NES::cpuRead(uint16_t address)
+    {
+        return mainBus.read(address);
+    }
+
     std::vector<uint8_t> NES::createTestProgram()
     {
         std::vector<uint8_t> program(0x8000, 0x00);
 
-        // --- Configuración de PPUCTRL ---
-        // $8000: LDA #$80
-        program[0x0000] = 0xA9; program[0x0001] = 0x80;
+        // --- Inicialización ---
+        // $8000: LDX #$00  (X se usará tanto para el VALOR como para la DIRECCIÓN)
+        program[0x0000] = 0xA2; program[0x0001] = 0x00;
 
-        // $8002: STA $2000 (PPUCTRL = 0x80)
-        program[0x0002] = 0x8D; program[0x0003] = 0x00; program[0x0004] = 0x20;
-
-        // --- Configuración de PPUMASK ---
-        // $8005: LDA #$1E
-        program[0x0005] = 0xA9; program[0x0006] = 0x1E;
-
-        // $8007: STA $2001 (PPUMASK = 0x1E)
-        program[0x0007] = 0x8D; program[0x0008] = 0x01; program[0x0009] = 0x20;
-
-        // --- Configurar dirección VRAM: $2000 ---
-        // $800A: LDA #$20
-        program[0x000A] = 0xA9; program[0x000B] = 0x20;
-
-        // $800C: STA $2006 (byte alto de PPUADDR)
-        program[0x000C] = 0x8D; program[0x000D] = 0x06; program[0x000E] = 0x20;
-
-        // $800F: LDA #$00
-        program[0x000F] = 0xA9; program[0x0010] = 0x00;
-
-        // $8011: STA $2006 (byte bajo de PPUADDR; dirección final = $2000)
-        program[0x0011] = 0x8D; program[0x0012] = 0x06; program[0x0013] = 0x20;
-
-        // --- Escribir datos en CIRAM mediante PPUDATA ---
-        // $8014: LDA #$23
-        program[0x0014] = 0xA9; program[0x0015] = 0x23;
-
-        // $8016: STA $2007 (VRAM[$2000] = 0x23)
-        program[0x0016] = 0x8D; program[0x0017] = 0x07; program[0x0018] = 0x20;
-
-        // $8019: LDA #$45
-        program[0x0019] = 0xA9; program[0x001A] = 0x45;
-
-        // $801B: STA $2007 (VRAM[$2001] = 0x45)
-        program[0x001B] = 0x8D; program[0x001C] = 0x07; program[0x001D] = 0x20;
-
-        // $801E: LDA #$67
-        program[0x001E] = 0xA9; program[0x001F] = 0x67;
-
-        // $8020: STA $2007 (VRAM[$2002] = 0x67)
-        program[0x0020] = 0x8D; program[0x0021] = 0x07; program[0x0022] = 0x20;
-
-        // $8023: LDA #$89
-        program[0x0023] = 0xA9; program[0x0024] = 0x89;
-
-        // $8025: STA $2007 (VRAM[$2003] = 0x89)
-        program[0x0025] = 0x8D; program[0x0026] = 0x07; program[0x0027] = 0x20;
-
-        // --- Configurar dirección PaletteRAM: $3F00 ---
-        // $8028: LDA #$3F
-        program[0x0028] = 0xA9; program[0x0029] = 0x3F;
-
-        // $802A: STA $2006 (byte alto de PPUADDR)
-        program[0x002A] = 0x8D; program[0x002B] = 0x06; program[0x002C] = 0x20;
-
-        // $802D: LDA #$00
-        program[0x002D] = 0xA9; program[0x002E] = 0x00;
-
-        // $802F: STA $2006 (byte bajo de PPUADDR; dirección final = $3F00)
-        program[0x002F] = 0x8D; program[0x0030] = 0x06; program[0x0031] = 0x20;
-
-        // $8032: LDA #$2A
-        program[0x0032] = 0xA9; program[0x0033] = 0x2A;
-
-        // $8034: STA $2007 (PaletteRAM[$3F00] = 0x2A)
-        program[0x0034] = 0x8D; program[0x0035] = 0x07; program[0x0036] = 0x20;
+        // --- Bucle Principal (Loop) ---
+        // $8002: TXA       (Transfiere el valor de X al Acumulador A)
+        program[0x0002] = 0x8A;
+        
+        // $8003: STA $00,X (Guarda el valor de A en la dirección ZeroPage $00 + X)
+        program[0x0003] = 0x95; program[0x0004] = 0x00;
+        
+        // $8005: INX       (Incrementa X. Al pasar de 0xFF, X vuelve a 0x00 y activa flag Z)
+        program[0x0005] = 0xE8;
+        
+        // $8006: BNE $8002 (Branch if Not Equal. Si Z=0, salta 5 bytes hacia atrás a $8002)
+        // El offset en complemento a dos para retroceder 5 bytes desde $8008 es 0xFB
+        program[0x0006] = 0xD0; program[0x0007] = 0xFA;
 
         // --- Fin del Programa ---
-        // $8037: KIL / JAM (opcode asignado por tu implementación)
-        program[0x0037] = 0xB2;
+        // $8008: KIL / JAM (Se ejecuta solo cuando X se desborda a 0x00 y Z se vuelve 1)
+        program[0x0008] = 0xB2;
 
         // Vectores de Reset ($FFFC/$FFFD apuntando a $8000)
         program[0x7FFC] = 0x00;

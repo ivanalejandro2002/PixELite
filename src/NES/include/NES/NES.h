@@ -11,6 +11,8 @@
 #include <NES/PPU/PPU2C02.h>
 #include <NES/PPU/PPURegisters.h>
 
+#include <NES/APU/APU.h>
+
 namespace NES
 {
     class NES
@@ -28,11 +30,14 @@ namespace NES
             void debugNMI();
             void debugIRQ();
             void debugHighIRQ();
+            void cpuWrite(uint16_t address, uint8_t value);
+            uint8_t cpuRead(uint16_t address);
 
             bool isCpuJammed();
 
             const PPU2C02& getPPU() const;
             PPU2C02& getPPU();
+            APU& getAPU();
 
             static std::vector<uint8_t> createTestProgram();
             static std::vector<uint8_t> createTestCHR();
@@ -47,6 +52,8 @@ namespace NES
 
             PPU2C02 ppu;
             PPURegisters ppuRegisters;
+
+            APU apu;
 
             uint64_t masterClock = 0;
     };

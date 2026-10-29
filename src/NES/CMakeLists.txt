@@ -15,6 +15,13 @@ add_library(NES
     src/PPU/PPU2C02.cpp
     src/PPU/PPURegisters.cpp
 
+    src/APU/APU.cpp
+    src/APU/PulseChannel.cpp
+    src/APU/TriangleChannel.cpp
+    src/APU/NoiseChannel.cpp
+    src/APU/DMCChannel.cpp
+    src/APU/AudioRingBuffer.cpp
+
     src/Memory/RAM.cpp
     src/Memory/PRGROM.cpp
 
