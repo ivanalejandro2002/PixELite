@@ -3,7 +3,9 @@
 #include <NES/Bus/Bus.h>
 #include <NES/PPU/CIRAM.h>
 #include <NES/PPU/PaletteRAM.h>
+#include <NES/Cartridge/PPUCartridgeBridge.h>
 #include <NES/Cartridge/CHRROM.h>
+#include <NES/Cartridge/Cartridge.h>
 #include <Graphics/FrameBuffer.h>
 
 #include <array>
@@ -19,9 +21,11 @@ namespace NES
         {
             public:
                 PPU2C02(
-                    const std::vector<uint8_t> &chrData,
+                    Cartridge* cartridge,
                     Mirroring mirroring
                 );
+
+                PPU2C02(const std::vector<uint8_t> &chrData, Mirroring mirroring);
 
                 void connectMainBus(Bus *b);
 
@@ -55,6 +59,7 @@ namespace NES
                 );
 
                 NES::PPU::BackgroundPixel getBackgroundPixel();
+                CIRAM& getCiram();
 
                 const Graphics::FrameBuffer& getFramebuffer() const;
                 void debugGenerateTestPattern();
@@ -118,7 +123,8 @@ namespace NES
                 Bus bus;
                 Bus *mainBus = nullptr;
 
-                CHRROM chr;
+                PPUCartridgeBridge chrBridge;
+                std::unique_ptr<CHRROM> chr;
                 CIRAM ciram;
                 PaletteRAM palette;
 

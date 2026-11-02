@@ -1,8 +1,52 @@
 #include <NES/Cartridge/Cartridge.h>
+#include <NES/Mapper/MapperFactory.h>
 
 namespace NES
 {
     Cartridge::Cartridge(){};
+
+    bool Cartridge::handles(uint16_t addr) const {
+        // El cartucho responde al rango de PRG del CPU (y opcionalmente RAM de batería $6000-$7FFF)
+        return addr >= 0x8000 && addr <= 0xFFFF;
+    }
+
+    uint8_t Cartridge::read(uint16_t addr) {
+        uint32_t mappedAddr = 0;
+        if (mapper && mapper->cpuMapRead(addr, mappedAddr)) {
+            if (mappedAddr < prgRom.size()) {
+                return prgRom[mappedAddr];
+            }
+        }
+        return 0;
+    }
+
+    void Cartridge::write(uint16_t addr, uint8_t value) {
+        uint32_t mappedAddr = 0;
+        if (mapper) {
+            // El mapper procesa la escritura (cambio de banco o registros)
+            mapper->cpuMapWrite(addr, mappedAddr, value);
+        }
+    }
+
+    // Métodos para que la PPU también consulte la CHR a través del Mapper/Cartucho
+    uint8_t Cartridge::ppuRead(uint16_t addr) {
+        uint32_t mappedAddr = 0;
+        if (mapper && mapper->ppuMapRead(addr, mappedAddr)) {
+            if (mappedAddr < chrRom.size()) {
+                return chrRom[mappedAddr];
+            }
+        }
+        return 0;
+    }
+
+    void Cartridge::ppuWrite(uint16_t addr, uint8_t value) {
+        uint32_t mappedAddr = 0;
+        if (mapper && mapper->ppuMapWrite(addr, mappedAddr)) {
+            if (mappedAddr < chrRom.size()) {
+                chrRom[mappedAddr] = value;
+            }
+        }
+    }
 
     bool Cartridge::loadFromFile(const std::string& filepath)
     {
@@ -63,7 +107,7 @@ namespace NES
         }
         else
         {
-            prgSize = header.prgSizeLsb * 18384;
+            prgSize = header.prgSizeLsb * 16384;
             chrSize = header.chrSizeLsb * 8192;
         }
 
@@ -140,6 +184,18 @@ namespace NES
                     << "  - Trainer: " << (hasTrainer ? "Presente (512 bytes)" : "Ausente") << "\n"
                     << "  - Mirroring: " << (mirroring == Mirroring::Vertical ? "Vertical" : (mirroring == Mirroring::Horizontal ? "Horizontal" : "4-Screen")) << "\n"
                     << (isNes20 ? "  - Región de Hardware: " + std::string(timing == ConsoleTiming::NTSC ? "NTSC" : timing == ConsoleTiming::PAL ? "PAL" : "Dendy/Multiple") + "\n" : "");
+
+        uint8_t prgBanks = static_cast<uint8_t>(prgSize / 16384);
+        uint8_t chrBanks = static_cast<uint8_t>(chrRom.size() / 8192);
+
+        mapper = MapperFactory::createMapper(mapperNumber, prgBanks, chrBanks);
+
+        if (!mapper) {
+            std::cerr << "[Cartridge] Error crítico: No se pudo instanciar el Mapper ID " << mapperNumber << "\n";
+            return false;
+        }
+
+        std::cout << "[Cartridge] ROM cargada con éxito. Mapper " << mapperNumber << " inicializado correctamente.\n";
 
         return true;
     }
