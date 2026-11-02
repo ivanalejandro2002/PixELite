@@ -1,6 +1,7 @@
 #pragma once
 
 #include <NES/Device.h>
+#include <NES/PPU/Mirroring.h>
 #include <array>
 #include <cstdint>
 
@@ -9,14 +10,6 @@ namespace NES
     class CIRAM : public Device
     {
         public:
-            enum class Mirroring
-            {
-                Horizontal,
-                Vertical,
-                SingleScreenLower,
-                SingleScreenUpper,
-                FourScreen
-            };
 
             explicit CIRAM(Mirroring mirroring);
 

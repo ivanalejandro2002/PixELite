@@ -22,10 +22,13 @@ add_library(NES
     src/APU/DMCChannel.cpp
     src/APU/AudioRingBuffer.cpp
 
+    src/Controller/Controller.cpp
+
     src/Memory/RAM.cpp
     src/Memory/PRGROM.cpp
 
     src/Cartridge/CHRROM.cpp
+    src/Cartridge/Cartridge.cpp
 
     src/Bus.cpp
 

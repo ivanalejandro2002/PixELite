@@ -10,9 +10,11 @@ namespace NES
             prgRom(createTestProgram()),
             mainBus(),
             cpu(),
-            ppu(createTestCHR(), CIRAM::Mirroring::Horizontal),
+            ppu(createTestCHR(), Mirroring::Horizontal),
             ppuRegisters(ppu),
-            apu(mainBus)
+            apu(mainBus),
+            controller1(),
+            cartridge()
     {
         cpu.connectBus(&mainBus);
         ppuRegisters.connectMainBus(&mainBus);
@@ -20,6 +22,7 @@ namespace NES
         mainBus.addDevice(&ram);
         mainBus.addDevice(&ppuRegisters);
         mainBus.addDevice(&apu);
+        mainBus.addDevice(&controller1);
 
         mainBus.addAddressMask({
             0x0000,
@@ -66,6 +69,11 @@ namespace NES
         masterClock++;
     }
 
+    void NES::loadROM(const std::string &filepath)
+    {
+        cartridge.loadFromFile(filepath);
+    }
+
     void NES::mock()
     {
         cpu.mock();
@@ -85,6 +93,11 @@ namespace NES
     APU& NES::getAPU()
     {
         return apu;
+    }
+
+    Controller& NES::getController1()
+    {
+        return controller1;
     }
 
     PPU2C02& NES::getPPU()

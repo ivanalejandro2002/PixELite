@@ -13,6 +13,9 @@
 
 #include <NES/APU/APU.h>
 
+#include <NES/Controller/Controller.h>
+#include <NES/Cartridge/Cartridge.h>
+
 namespace NES
 {
     class NES
@@ -23,6 +26,8 @@ namespace NES
             void clock();
 
             void reset();
+
+            void loadROM(const std::string &filepath);
 
             void mock();
             void memoryDebug();
@@ -38,6 +43,7 @@ namespace NES
             const PPU2C02& getPPU() const;
             PPU2C02& getPPU();
             APU& getAPU();
+            Controller& getController1();
 
             static std::vector<uint8_t> createTestProgram();
             static std::vector<uint8_t> createTestCHR();
@@ -54,6 +60,10 @@ namespace NES
             PPURegisters ppuRegisters;
 
             APU apu;
+
+            Controller controller1;
+
+            Cartridge cartridge;
 
             uint64_t masterClock = 0;
     };
