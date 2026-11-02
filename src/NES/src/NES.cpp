@@ -7,14 +7,13 @@ namespace NES
 {
     NES::NES()
         :   ram(),
-            prgRom(createTestProgram()),
             mainBus(),
             cpu(),
-            ppu(createTestCHR(), Mirroring::Horizontal),
+            cartridge(), // <-- Solo el cartridge, ya no prgRom
+            ppu(&cartridge, Mirroring::Horizontal), // <-- Puntuando al cartridge real para la CHR-RAM/ROM
             ppuRegisters(ppu),
             apu(mainBus),
-            controller1(),
-            cartridge()
+            controller1()
     {
         cpu.connectBus(&mainBus);
         ppuRegisters.connectMainBus(&mainBus);
@@ -38,7 +37,7 @@ namespace NES
             0x2000
         });
 
-        mainBus.addDevice(&prgRom);
+        mainBus.addDevice(&cartridge);
 
         reset();
     }
@@ -71,7 +70,17 @@ namespace NES
 
     void NES::loadROM(const std::string &filepath)
     {
-        cartridge.loadFromFile(filepath);
+        if (cartridge.loadFromFile(filepath))
+        {
+            ppu.getCiram().setMirroring(cartridge.getMirroring());
+            reset();
+
+            std::cout << "[NES] Sistema inicializado con la ROM: " << filepath << "\n";
+        }
+        else
+        {
+            std::cerr << "[NES] Fallo crítico al intentar cargar la ROM.\n";
+        }
     }
 
     void NES::mock()

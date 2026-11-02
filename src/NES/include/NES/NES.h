@@ -51,10 +51,11 @@ namespace NES
             
 
             RAM ram;
-            PRGROM prgRom;
             
             Bus mainBus;
             CPU::MOS6502 cpu;
+
+            Cartridge cartridge;
 
             PPU2C02 ppu;
             PPURegisters ppuRegisters;
@@ -62,8 +63,6 @@ namespace NES
             APU apu;
 
             Controller controller1;
-
-            Cartridge cartridge;
 
             uint64_t masterClock = 0;
     };

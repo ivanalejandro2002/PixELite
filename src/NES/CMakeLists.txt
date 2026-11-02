@@ -30,6 +30,8 @@ add_library(NES
     src/Cartridge/CHRROM.cpp
     src/Cartridge/Cartridge.cpp
 
+    src/Mapper/MapperFactory.cpp
+
     src/Bus.cpp
 
     src/NES.cpp

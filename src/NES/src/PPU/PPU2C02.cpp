@@ -3,13 +3,33 @@
 namespace NES
 {
     PPU2C02::PPU2C02(
-        const std::vector<uint8_t> &chrData,
+        Cartridge *cartridge,
         Mirroring mirroring
     )
-        : chr(chrData),
+        : chrBridge(cartridge),
             ciram(mirroring)
     {
-        bus.addDevice(&chr);
+        bus.addDevice(&chrBridge);
+        bus.addDevice(&ciram);
+        bus.addDevice(&palette);
+
+        t = v = 0;
+        fineX = 0;
+        writeToggle = false;
+
+        readBuffer = 0;
+
+        ioLatch = 0;
+
+        reset();
+    }
+
+    PPU2C02::PPU2C02(const std::vector<uint8_t> &chrData, Mirroring mirroring)
+        : chrBridge(nullptr),
+          ciram(mirroring)
+    {
+        chr = std::make_unique<CHRROM>(chrData);
+        bus.addDevice(chr.get());
         bus.addDevice(&ciram);
         bus.addDevice(&palette);
 
@@ -270,6 +290,8 @@ namespace NES
             pixel == 0
         };
     }
+
+    CIRAM& PPU2C02::getCiram(){return ciram;}
 
     const Graphics::FrameBuffer& PPU2C02::getFramebuffer() const
     {

@@ -5,8 +5,11 @@
 #include <fstream>
 #include <iostream>
 #include <cmath>
+#include <memory>
 
 #include <NES/PPU/Mirroring.h>
+#include <NES/Device.h>
+#include <NES/Mapper/MapperIncludes.h>
 
 namespace NES{
     struct RomHeader
@@ -33,26 +36,34 @@ namespace NES{
         Dendy = 3
     };
 
-    class Cartridge
+    class Cartridge : public Device
     {
         public:
             Cartridge();
+
+            bool handles(uint16_t addr) const override;
+            uint8_t read(uint16_t addr) override;
+            void write(uint16_t addr, uint8_t data) override;
+            uint8_t ppuRead(uint16_t addr);
+            void ppuWrite(uint16_t addr, uint8_t value);
+
             bool loadFromFile(const std::string& filepath);
 
-            const std::vector<uint8_t>& getPRG() const;
-            const std::vector<uint8_t>& getCHR() const;
-            const std::vector<uint8_t>& getTrainer() const;
-            uint16_t getMapperNumber() const;
-            uint8_t getSubmapperNumber() const;
-            Mirroring getMirroring() const;
-            bool hasBatteryBackedRAM() const;
-            bool hasActiveTrainer() const;
+            const std::vector<uint8_t>& getPRG() const {return prgRom;}
+            const std::vector<uint8_t>& getCHR() const {return chrRom;}
+            const std::vector<uint8_t>& getTrainer() const {return trainer;};
+            uint16_t getMapperNumber() const {return mapperNumber;}
+            uint8_t getSubmapperNumber() const {return subMapperNumber;}
+            Mirroring getMirroring() const {return mirroring;}
+            bool hasBatteryBackedRAM() const {return hasBattery;}
+            bool hasActiveTrainer() const {return hasTrainer;}
 
         private:
             std::vector<uint8_t> prgRom;
             std::vector<uint8_t> chrRom;
             std::vector<uint8_t> trainer;
             std::vector<uint8_t> prgRam;
+            std::unique_ptr<Mapper> mapper;
 
             uint16_t mapperNumber = 0;
             uint8_t subMapperNumber = 0;

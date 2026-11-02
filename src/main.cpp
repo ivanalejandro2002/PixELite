@@ -53,23 +53,24 @@ using Clock = std::chrono::steady_clock;
 double sampleAccumulator = 0.0;
 NES::AudioRingBuffer audioRingBuffer(44100);
 
-// Dentro de tu bucle de ejecución por fotograma (ej. 60 FPS):
 void runEmulationFrame(
     NES::NES& nes,
     NES::APU& apu,
     NES::AudioRingBuffer& ringBuffer
 )
 {
-    // Variables estáticas para mantener el estado del filtro entre muestras
     static float lowPassOutput = 0.0f;
     constexpr float ALPHA = 0.4f; 
 
-    while (!nes.getPPU().isFrameComplete())
+    constexpr int CYCLES_PER_FRAME = 29780; 
+
+    for (int cpuCycle = 0; cpuCycle < CYCLES_PER_FRAME; ++cpuCycle)
     {
         nes.clock(); 
+        nes.clock(); 
+        nes.clock();
 
-        sampleAccumulator += (1.0 / 3.0);
-
+        sampleAccumulator += 1.0;
         if (sampleAccumulator >= CYCLES_PER_SAMPLE)
         {
             sampleAccumulator -= CYCLES_PER_SAMPLE;
@@ -78,15 +79,12 @@ void runEmulationFrame(
                 ? apu.getTestToneSample()
                 : apu.getAudioSample();
 
-            // --- APLICAR FILTRO PASA-BAJAS ---
-            lowPassOutput = lowPassOutput + ALPHA * (rawSample - lowPassOutput);
+            // Aquí se usa y actualiza la variable para suavizar la onda de audio
+            lowPassOutput += ALPHA * (rawSample - lowPassOutput);
 
-            // Inyectar directamente al Ring Buffer (elástico y seguro)
-            ringBuffer.push(lowPassOutput); // *Nota: Cambia .push() por .write() si tu clase usa ese nombre
+            ringBuffer.push(lowPassOutput);
         }
     }
-
-    nes.getPPU().clearFrameComplete();
 }
 
 void closeAudio()
@@ -227,7 +225,7 @@ int main()
     // nes.getPPU().writeRegister(0x2005, 10);
     // nes.getPPU().writeRegister(0x2005, 0);
 
-    NES::Testing::runAllPPUTests(nes);
+    /*NES::Testing::runAllPPUTests(nes);
 
 
     nes.getPPU().writeVRAM(0x3F00, 0x0F);
@@ -303,7 +301,6 @@ int main()
 
     //nes.getPPU().debugGenerateBackground();
 
-    bool running = true;
     nes.getPPU().writePPUMASK(0x1E);
 
 
@@ -341,10 +338,13 @@ int main()
     }
 
     nes.memoryDebug();
+    */
 
     // Definimos un tamaño de búfer ideal (ej. el equivalente a ~3 fotogramas de audio)
     // 44100 Hz / 60.098 FPS = ~734 muestras por frame. 
     // 3 frames * 734 muestras * 4 bytes (float) = ~8808 bytes.
+    bool running = true;
+    
     const size_t TARGET_BUFFER_BYTES = 12000;
 
     nes.getAPU().deactivateTestMode();
@@ -360,7 +360,7 @@ int main()
     nes.loadROM("../NESROMS/oficial/BestNESGames/DuckTales (USA).nes");
 
 
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 8; ++i) {
         runEmulationFrame(nes, nes.getAPU(), audioRingBuffer);
     }
 
@@ -450,15 +450,11 @@ int main()
         // Enviar a SDL3
         if (extracted > 0)
         {
-            int queuedBytes = SDL_GetAudioStreamQueued(audioStream);
-            if (queuedBytes < 16384) 
-            {
-                SDL_PutAudioStreamData(
-                    audioStream,
-                    fixedFrameSamples.data(),
-                    static_cast<int>(extracted * sizeof(float))
-                );
-            }
+            SDL_PutAudioStreamData(
+                audioStream,
+                fixedFrameSamples.data(),
+                static_cast<int>(extracted * sizeof(float))
+            );
         }
 
         // Renderizado y sincronización gráfica
