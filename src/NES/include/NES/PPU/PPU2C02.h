@@ -20,7 +20,7 @@ namespace NES
             public:
                 PPU2C02(
                     const std::vector<uint8_t> &chrData,
-                    CIRAM::Mirroring mirroring
+                    Mirroring mirroring
                 );
 
                 void connectMainBus(Bus *b);
