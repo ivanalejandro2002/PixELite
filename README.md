@@ -28,5 +28,5 @@ libpipewire-0.3-dev \
 Para clonar el resposiorio es necesario seguir una serie de pasos importantes, esto debido a submódulos externos a este proyecto, los cuales son imgui y SDL3.
 * git clone --recursive <liga del repositorio>
 * cmake -B build
-* cmake --build build
-* ./build/TT
+* cmake -B build -DCMAKE_BUILD_TYPE=Release
+* cmake --build build -j$(nproc)

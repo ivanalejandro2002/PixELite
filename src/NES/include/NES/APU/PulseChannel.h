@@ -22,6 +22,7 @@ namespace NES
             uint8_t output() const;
             uint8_t getLengthCounter() const;
             void setEnabled(bool enable);
+            bool isEnabled() const;
 
         private:
             bool isPulse1;

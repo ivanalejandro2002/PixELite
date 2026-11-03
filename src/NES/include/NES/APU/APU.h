@@ -48,6 +48,13 @@ namespace NES
             bool fiveStepMode;
             bool irqInhibit;
             uint8_t frameStep;
+            bool frameIrqFlag = false;
+
+            bool pulseDivider = false;
+
+            bool pendingFrameCounterReset = false;
+            uint8_t pendingFrameCounterValue = 0;
+            int frameCounterResetDelay = 0;
 
             void handleFrameCounterWrite(uint8_t value);
     };

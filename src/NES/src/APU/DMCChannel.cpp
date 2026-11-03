@@ -148,6 +148,7 @@ namespace NES
                 else if(irqEnabled)
                 {
                     irqFlag = true;
+                    busReference.setIRQLine(false);
                 }
             }
         }
@@ -166,7 +167,10 @@ namespace NES
     void DMCChannel::clearIRQFlag()
     {
         irqFlag = false;
+        busReference.setIRQLine(true); 
     }
 
     uint16_t DMCChannel::getBytesRemaining() const {return bytesRemaining;}
+    
+    Bus& DMCChannel::getBusReference() {return busReference;}
 }

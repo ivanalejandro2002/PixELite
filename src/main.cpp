@@ -16,32 +16,6 @@
 // Variables globales o dentro de tu clase de la aplicación/emulador
 SDL_AudioStream* audioStream = nullptr;
 
-bool initAudio()
-{
-    SDL_AudioSpec spec;
-    spec.freq = 44100;          // Frecuencia de muestreo estándar
-    spec.format = SDL_AUDIO_F32; // Muestras en float de 32 bits
-    spec.channels = 1;          // Mono (la NES es nativamente monofónica)
-
-    // SDL3 abre el dispositivo y crea el stream de audio en un solo paso
-    audioStream = SDL_OpenAudioDeviceStream(
-        SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, 
-        &spec, 
-        nullptr, // Sin callback (modelo de "push")
-        nullptr
-    );
-
-    if (!audioStream)
-    {
-        SDL_Log("¡Fallo crítico al abrir el stream de audio! Error: %s", SDL_GetError());
-        return false;
-    }
-
-    // Reanudar el stream de audio para permitir la reproducción
-    SDL_ResumeAudioStreamDevice(audioStream);
-    return true;
-}
-
 // Constantes de temporización
 constexpr double CPU_CLOCK_RATE = 1789773.5; // Frecuencia NTSC exacta
 constexpr double SAMPLE_RATE = 44100.0;
@@ -53,6 +27,73 @@ using Clock = std::chrono::steady_clock;
 double sampleAccumulator = 0.0;
 NES::AudioRingBuffer audioRingBuffer(44100);
 
+bool initAudio()
+{
+    SDL_AudioSpec spec{};
+
+    spec.freq = SAMPLE_RATE;
+    spec.format = SDL_AUDIO_F32;
+    spec.channels = 1;
+
+    audioStream = SDL_OpenAudioDeviceStream(
+        SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+        &spec,
+        nullptr,
+        nullptr
+    );
+
+    if (!audioStream)
+    {
+        SDL_Log(
+            "Fallo al abrir el stream de audio: %s",
+            SDL_GetError()
+        );
+        return false;
+    }
+
+    // Consultar el backend de audio activo.
+    const char* driver = SDL_GetCurrentAudioDriver();
+
+    SDL_Log(
+        "Audio driver: %s",
+        driver ? driver : "Unknown"
+    );
+
+    // Consultar el dispositivo asociado al stream.
+    SDL_AudioDeviceID device =
+        SDL_GetAudioStreamDevice(audioStream);
+
+    SDL_Log(
+        "Audio device ID: %u",
+        static_cast<unsigned int>(device)
+    );
+
+    // Consultar el formato real del dispositivo.
+    SDL_AudioSpec deviceSpec{};
+
+    if (SDL_GetAudioDeviceFormat(device, &deviceSpec, nullptr))
+    {
+        SDL_Log(
+            "Device format: %d Hz, %d channels, format: %d",
+            deviceSpec.freq,
+            deviceSpec.channels,
+            deviceSpec.format
+        );
+    }
+    else
+    {
+        SDL_Log(
+            "Could not get device format: %s",
+            SDL_GetError()
+        );
+    }
+
+    // Iniciar la reproducción.
+    SDL_ResumeAudioStreamDevice(audioStream);
+
+    return true;
+}
+
 void runEmulationFrame(
     NES::NES& nes,
     NES::APU& apu,
@@ -60,31 +101,30 @@ void runEmulationFrame(
 )
 {
     static float lowPassOutput = 0.0f;
-    constexpr float ALPHA = 0.4f; 
+    constexpr float ALPHA = 0.4f;
 
-    constexpr int CYCLES_PER_FRAME = 29780; 
-
-    for (int cpuCycle = 0; cpuCycle < CYCLES_PER_FRAME; ++cpuCycle)
+    while (!nes.getPPU().isFrameComplete())
     {
-        nes.clock(); 
-        nes.clock(); 
         nes.clock();
 
-        sampleAccumulator += 1.0;
+        // Un ciclo de CPU por cada tres ciclos del PPU.
+        sampleAccumulator += 1.0 / 3.0;
+
         if (sampleAccumulator >= CYCLES_PER_SAMPLE)
         {
             sampleAccumulator -= CYCLES_PER_SAMPLE;
 
-            float rawSample = apu.testMode
+            const float rawSample = apu.testMode
                 ? apu.getTestToneSample()
                 : apu.getAudioSample();
 
-            // Aquí se usa y actualiza la variable para suavizar la onda de audio
             lowPassOutput += ALPHA * (rawSample - lowPassOutput);
 
             ringBuffer.push(lowPassOutput);
         }
     }
+
+    nes.getPPU().clearFrameComplete();
 }
 
 void closeAudio()
@@ -357,7 +397,8 @@ int main()
 
 
 
-    nes.loadROM("../NESROMS/oficial/BestNESGames/DuckTales (USA).nes");
+    // nes.loadROM("../NESROMS/oficial/BestNESGames/DuckTales (USA).nes");
+    nes.loadROM("../NESROMS/AccuracyCoin-main/AccuracyCoin.nes");
 
 
     for (int i = 0; i < 8; ++i) {
@@ -375,106 +416,229 @@ int main()
 
     while(running)
     {
-        auto frameStart = std::chrono::high_resolution_clock::now();
         SDL_Event event;
 
-        // RESTAURADO: Procesar eventos de la ventana para que no se congele
-        while(SDL_PollEvent(&event))
+        // --------------------------------------------------
+        // 1. Procesamiento de eventos
+        // --------------------------------------------------
+
+        while (SDL_PollEvent(&event))
         {
-            if(event.type == SDL_EVENT_QUIT)
+            if (event.type == SDL_EVENT_QUIT)
             {
                 running = false;
             }
 
-            // if (event.type == SDL_EVENT_KEY_DOWN)
-            // {
-            //     if (event.key.key == SDLK_SPACE)
-            //     {
-
-            //         uint8_t status = nes.cpuRead(0x4015);
-            //         nes.cpuWrite(0x4015, status & 0xFE); 
-            //         triggerTestPulseChannel(nes);
-            //     }
-            // }
-
-            if(event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
+            if (event.type == SDL_EVENT_KEY_DOWN ||
+                event.type == SDL_EVENT_KEY_UP)
             {
                 bool isPressed = (event.type == SDL_EVENT_KEY_DOWN);
                 SDL_Keycode key = event.key.key;
 
-                // Mapeo clásico de teclado para la NES:
-                // Z -> A, X -> B, Shift Izquierdo -> Select, Enter -> Start
-                // Flechas -> Direccionales
-                if (key == SDLK_Z)      nes.getController1().setButtonState(NES::Controller::A, isPressed);
-                if (key == SDLK_X)      nes.getController1().setButtonState(NES::Controller::B, isPressed);
-                if (key == SDLK_RSHIFT) nes.getController1().setButtonState(NES::Controller::SELECT, isPressed);
-                if (key == SDLK_RETURN) nes.getController1().setButtonState(NES::Controller::START, isPressed);
-                if (key == SDLK_UP)     nes.getController1().setButtonState(NES::Controller::UP, isPressed);
-                if (key == SDLK_DOWN)   nes.getController1().setButtonState(NES::Controller::DOWN, isPressed);
-                if (key == SDLK_LEFT)   nes.getController1().setButtonState(NES::Controller::LEFT, isPressed);
-                if (key == SDLK_RIGHT)  nes.getController1().setButtonState(NES::Controller::RIGHT, isPressed);
+                // Mapeo clásico de teclado para la NES.
+                if (key == SDLK_Z)
+                    nes.getController1().setButtonState(
+                        NES::Controller::A, isPressed);
+
+                if (key == SDLK_X)
+                    nes.getController1().setButtonState(
+                        NES::Controller::B, isPressed);
+
+                if (key == SDLK_RSHIFT)
+                    nes.getController1().setButtonState(
+                        NES::Controller::SELECT, isPressed);
+
+                if (key == SDLK_RETURN)
+                    nes.getController1().setButtonState(
+                        NES::Controller::START, isPressed);
+
+                if (key == SDLK_UP)
+                    nes.getController1().setButtonState(
+                        NES::Controller::UP, isPressed);
+
+                if (key == SDLK_DOWN)
+                    nes.getController1().setButtonState(
+                        NES::Controller::DOWN, isPressed);
+
+                if (key == SDLK_LEFT)
+                    nes.getController1().setButtonState(
+                        NES::Controller::LEFT, isPressed);
+
+                if (key == SDLK_RIGHT)
+                    nes.getController1().setButtonState(
+                        NES::Controller::RIGHT, isPressed);
             }
         }
+
+        if (!running)
+            break;
+
+
+        // --------------------------------------------------
+        // 2. Ejecutar un frame de emulación
+        // --------------------------------------------------
+
+        auto emulationStart = Clock::now();
 
         runEmulationFrame(nes, nes.getAPU(), audioRingBuffer);
 
-        size_t currentAvailable = audioRingBuffer.available();
-        if (currentAvailable > 256) 
-        {
-            double error = static_cast<double>(currentAvailable) - static_cast<double>(targetBufferSize);
-            
-            // ZONA MUERTA: Evita que el tono oscile (vibrato)
-            if (std::abs(error) > 150) 
-            {
-                constexpr double gain = 0.00001; // Ganancia suave
-                drcRatio = 1.0 + (error * gain);
-                
-                // Rango estricto para que los cambios de tono no se noten
-                drcRatio = std::clamp(drcRatio, 0.995, 1.005); 
-            }
-            else 
-            {
-                // Regresar suavemente al ratio neutral (1.0) en la zona segura
-                drcRatio = drcRatio * 0.98 + 1.0 * 0.02;
-            }
-        }
+        auto emulationEnd = Clock::now();
 
-        // Extraer muestras con resampleo DRC
+        double emulationMs =
+            std::chrono::duration<double, std::milli>(
+                emulationEnd - emulationStart
+            ).count();
+
+
+        // --------------------------------------------------
+        // 3. Obtener el estado de los buffers
+        // --------------------------------------------------
+
+        constexpr double TARGET_TOTAL_SAMPLES = 2205.0;
+
+        constexpr double DRC_GAIN = 0.00001;
+        constexpr double DRC_SMOOTHING = 0.05;
+
+        size_t ringAvailable = audioRingBuffer.available();
+
+        int queuedBytes = SDL_GetAudioStreamQueued(audioStream);
+
+        size_t sdlSamples = queuedBytes > 0
+            ? static_cast<size_t>(queuedBytes) / sizeof(float)
+            : 0;
+
+        double totalSamples =
+            static_cast<double>(ringAvailable + sdlSamples);
+
+        double totalLatencyMs =
+            1000.0 * totalSamples / SAMPLE_RATE;
+
+
+        // --------------------------------------------------
+        // 4. Dynamic Rate Control
+        // --------------------------------------------------
+
+        double error = totalSamples - TARGET_TOTAL_SAMPLES;
+
+        double desiredRatio = std::clamp(
+            1.0 + error * DRC_GAIN,
+            0.995,
+            1.005
+        );
+
+        drcRatio +=
+            (desiredRatio - drcRatio) * DRC_SMOOTHING;
+
+
+        // --------------------------------------------------
+        // 5. Extraer muestras con resampleo DRC
+        // --------------------------------------------------
+
         size_t extracted = audioRingBuffer.readResampled(
-            fixedFrameSamples.data(), 
-            samplesPerFrame, 
-            drcRatio, 
+            fixedFrameSamples.data(),
+            samplesPerFrame,
+            drcRatio,
             srcPosition
         );
 
-        // Enviar a SDL3
+
+        // --------------------------------------------------
+        // 6. Enviar audio a SDL3
+        // --------------------------------------------------
+
+        bool audioSubmitted = true;
+
         if (extracted > 0)
         {
-            SDL_PutAudioStreamData(
+            audioSubmitted = SDL_PutAudioStreamData(
                 audioStream,
                 fixedFrameSamples.data(),
                 static_cast<int>(extracted * sizeof(float))
             );
+
+            if (!audioSubmitted)
+            {
+                std::cerr
+                    << "Error al enviar audio a SDL: "
+                    << SDL_GetError()
+                    << '\n';
+            }
         }
 
-        // Renderizado y sincronización gráfica
+
+        // --------------------------------------------------
+        // 7. Medir audio pendiente después del envío
+        // --------------------------------------------------
+
+        int queuedBytesAfter = SDL_GetAudioStreamQueued(audioStream);
+
+        size_t sdlSamplesAfter = queuedBytesAfter > 0
+            ? static_cast<size_t>(queuedBytesAfter) / sizeof(float)
+            : 0;
+
+        size_t ringAfter = audioRingBuffer.available();
+
+        double totalSamplesAfter =
+            static_cast<double>(ringAfter + sdlSamplesAfter);
+
+        double latencyAfterMs =
+            1000.0 * totalSamplesAfter / SAMPLE_RATE;
+
+
+        // --------------------------------------------------
+        // 8. Diagnóstico
+        // --------------------------------------------------
+
+        static int debugFrames = 0;
+
+        if (++debugFrames >= 60)
+        {
+            debugFrames = 0;
+
+            std::cout
+                << "Emulation: " << emulationMs << " ms"
+                << " | Ring: " << ringAfter << " samples"
+                << " | Extracted: " << extracted << " samples"
+                << " | SDL: "
+                << (1000.0 * sdlSamplesAfter / SAMPLE_RATE) << " ms"
+                << " | Total latency: " << latencyAfterMs << " ms"
+                << " | DRC: " << drcRatio
+                << " | Audio submitted: "
+                << (audioSubmitted ? "OK" : "FAILED")
+                << '\n';
+        }
+
+
+        // --------------------------------------------------
+        // 9. Renderizado y sincronización gráfica
+        // --------------------------------------------------
+
         renderer.renderFrame(nes.getPPU().getFramebuffer());
+
         SDL_GL_SwapWindow(window);
-        
-        // --- LIMITADOR DE VELOCIDAD ULTRA SUAVE (Evita que la CPU se dispare al 100%) ---
+
+
+        // --------------------------------------------------
+        // 10. Limitador de velocidad
+        // --------------------------------------------------
+
         auto now = Clock::now();
-        
-        // Si nos atrasamos más de 100ms (por un tirón o carga de los ventiladores), 
-        // reajustamos el reloj para evitar que intente "acelerar" de golpe y sature la CPU.
-        if (now > nextFrameTime + std::chrono::milliseconds(100)) {
+
+        // Evitar acumular retrasos grandes.
+        if (now > nextFrameTime + std::chrono::milliseconds(100))
+        {
             nextFrameTime = now;
         }
 
-        nextFrameTime += std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-            std::chrono::duration<double, std::milli>(1000.0 / 60.098)
-        );
-        
-        if (nextFrameTime > Clock::now()) {
+        nextFrameTime +=
+            std::chrono::duration_cast<Clock::duration>(
+                std::chrono::duration<double, std::milli>(
+                    1000.0 / 60.098
+                )
+            );
+
+        if (nextFrameTime > Clock::now())
+        {
             std::this_thread::sleep_until(nextFrameTime);
         }
     }

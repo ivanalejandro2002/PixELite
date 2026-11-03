@@ -47,6 +47,8 @@ namespace NES
             void addWriteMask(const DataMask &mask);
             void resetBus();
 
+            OpenBus& getOpenBus();
+
             bool getNMILine();
             bool getIRQLine();
             bool getNMIActivation();

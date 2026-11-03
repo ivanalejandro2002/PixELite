@@ -46,6 +46,8 @@ namespace NES
         }
     }
 
+    bool PulseChannel::isEnabled() const { return enabled; }
+
     void PulseChannel::writeControl(uint8_t value)
     {
         dutyCycle = (value >> 6) & 0x03;
