@@ -25,6 +25,7 @@ namespace NES
             void clearIRQFlag();
 
             uint16_t getBytesRemaining() const;
+            Bus& getBusReference();
 
         private:
             Bus &busReference;

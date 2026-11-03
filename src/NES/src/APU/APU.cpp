@@ -25,13 +25,21 @@ namespace NES
         {
             uint8_t status = 0;
 
-            if (pulse1.getLengthCounter() > 0) status |= 0x01;
-            if (pulse2.getLengthCounter() > 0) status |= 0x02;
-            if (triangle.getLengthCounter() > 0) status |= 0x04;
-            if (noise.getLengthCounter() > 0) status |= 0x08;
-            if (dmc.getBytesRemaining() > 0) status |= 0x10;
+            if (pulse1.isEnabled() && pulse1.getLengthCounter() > 0) status |= 0x01;
+            if (pulse2.isEnabled() && pulse2.getLengthCounter() > 0) status |= 0x02;
+            if (triangle.isEnabled() && triangle.getLengthCounter() > 0) status |= 0x04;
+            if (noise.isEnabled() && noise.getLengthCounter() > 0) status |= 0x08;
+            if (dmc.isEnabled() && dmc.getBytesRemaining() > 0) status |= 0x10;
 
-            if (dmc.getIRQFlag()) status |= 0x80;
+            if(frameIrqFlag) status |= 0x40;
+            if(dmc.getIRQFlag()) status |= 0x80;
+
+            frameIrqFlag = false;
+
+            if (!dmc.getIRQFlag())
+            {
+                dmc.getBusReference().setIRQLine(true);
+            }
 
             return status;
         }
@@ -107,27 +115,55 @@ namespace NES
 
     void APU::handleFrameCounterWrite(uint8_t value)
     {
-        fiveStepMode = (value & 0x80) != 0;
-        irqInhibit = (value & 0x40) != 0;
-
-        if(irqInhibit)
-        {
-
-        }
-
-        cpuCycleCount = 0;
-        frameStep = 0;
-
-        if(fiveStepMode)
-        {
-
-        }
+        pendingFrameCounterReset = true;
+        pendingFrameCounterValue = value;
+        frameCounterResetDelay = 4; 
     }
 
     void APU::clock()
     {
+        if (pendingFrameCounterReset)
+        {
+            frameCounterResetDelay--;
+            if (frameCounterResetDelay <= 0)
+            {
+                pendingFrameCounterReset = false;
+                
+                // Execute the true structural mutation now that the hardware delay window has passed
+                fiveStepMode = (pendingFrameCounterValue & 0x80) != 0;
+                irqInhibit = (pendingFrameCounterValue & 0x40) != 0;
+
+                frameIrqFlag = false;
+
+                if(!dmc.getIRQFlag())
+                {
+                    dmc.getBusReference().setIRQLine(true);
+                }
+
+                // Reset the internal step timers cleanly
+                cpuCycleCount = 0;
+                frameStep = 0;
+
+                if (fiveStepMode)
+                {
+                    // This immediate clock now fires exactly on target without failing early metrics!
+                    pulse1.clockEnvelope();
+                    pulse2.clockEnvelope();
+                    triangle.clockLinearCounter();
+                    noise.clockEnvelope();
+
+                    pulse1.clockLengthCounter();
+                    pulse2.clockLengthCounter();
+                    triangle.clockLengthCounter();
+                    noise.clockLengthCounter();
+
+                    pulse1.clockSweep();
+                    pulse2.clockSweep();
+                }
+            }
+        }
+
         // Los canales de pulso en la NES real se actualizan cada 2 ciclos de CPU.
-        static bool pulseDivider = false;
         if (pulseDivider)
         {
             pulse1.clockTimer();
@@ -192,7 +228,8 @@ namespace NES
 
                         if(!irqInhibit)
                         {
-
+                            frameIrqFlag = true;
+                            dmc.getBusReference().setIRQLine(false);
                         }
                         break;
                 }

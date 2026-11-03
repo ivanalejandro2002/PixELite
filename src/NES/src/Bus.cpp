@@ -62,6 +62,11 @@ namespace NES
         remainingDMACycles = 0;
     }
 
+    OpenBus& Bus::getOpenBus()
+    {
+        return openBus;
+    }
+
     bool Bus::getNMILine()
     {
         return NMILine;

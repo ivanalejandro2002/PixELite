@@ -35,6 +35,8 @@ namespace NES
             lengthCounter = 0;
         }
     }
+    
+    bool TriangleChannel::isEnabled() const { return enabled; }
 
     void TriangleChannel::writeControl(uint8_t value)
     {

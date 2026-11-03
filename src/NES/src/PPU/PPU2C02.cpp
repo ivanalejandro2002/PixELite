@@ -648,8 +648,16 @@ namespace NES
 
             // PPUDATA
             case 0x0007:
+            {
+                uint16_t currentVramAddr = v & 0x3FFF;
                 value = readPPUDATA();
+
+                if(currentVramAddr >= 0x3F00)
+                {
+                    value = (value & 0x3F) | (ioLatch & 0xC0);
+                }
                 break;
+            }
 
             default:
                 break;
@@ -759,7 +767,13 @@ namespace NES
 
     uint8_t PPU2C02::readOAMDATA()
     {
-        return OAM[OAMADDR];
+        uint8_t value = OAM[OAMADDR];
+
+        if((OAMADDR & 0x03) == 0x02)
+        {
+            value = (value & 0xE3) | (ioLatch & 0x1C);
+        }
+        return value;
     }
 
     void PPU2C02::writeOAMDATA(uint8_t value)

@@ -38,6 +38,8 @@ namespace NES
         }
     }
 
+    bool NoiseChannel::isEnabled() const { return enabled; }
+
     void NoiseChannel::writeControl(uint8_t value)
     {
         lengthCounterEnable = (value & 0x20) != 0;

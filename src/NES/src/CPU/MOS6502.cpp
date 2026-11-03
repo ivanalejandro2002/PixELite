@@ -1622,17 +1622,17 @@ namespace NES::CPU
     {
         ALUResult result = alu.andOp(A, data);
 
-        bool bit5 = (result.result & ((uint8_t)1 << 5)); 
-        bool bit6 = (result.result & ((uint8_t)1 << 6));
+        ALUResult result2 = alu.rotateRight(result.result, status.getFlag(StatusRegister::C));
+
+        status.applyMask(result2.statusBits, result2.statusChangedBits);
+
+        bool bit5 = (result2.result & (0x20)) != 0; 
+        bool bit6 = (result2.result & (0x40)) != 0;
 
         status.setFlag(StatusRegister::V, bit5 ^ bit6);
         status.setFlag(StatusRegister::C, bit6);
-
-        ALUResult result2 = alu.shiftRight(A);
-        A = result2.result;
         
-        status.setFlag(StatusRegister::Z, A == 0);
-        status.setFlag(StatusRegister::N, (A & (0x80) != 0));
+        A = result2.result;
     }
     void MOS6502::executeXAA()
     {
@@ -1646,8 +1646,8 @@ namespace NES::CPU
     }
     void MOS6502::executeAXS()
     {
-        ALUResult result = alu.andOp(A, data);
-        ALUResult result2 = alu.substract(result.result, data, status.getFlag(StatusRegister::C));
+        ALUResult result = alu.andOp(A, X);
+        ALUResult result2 = alu.substract(result.result, data, true);
 
         X = result2.result;
 
@@ -1657,30 +1657,63 @@ namespace NES::CPU
 
     void MOS6502::executeAHX()
     {
-        uint8_t value = A & X & (static_cast<uint8_t>(addressHigh + 1));
-        uint16_t unstableAddress = 
-            static_cast<uint16_t>(addressLow) |
-            (static_cast<uint16_t>(addressHigh) << 8);
+        uint8_t value = A & X & static_cast<uint8_t>(addressHigh + 1);
+
+        bool pageCrossed = (addressLow < Y);
+        uint16_t finalAddress = 0;
+
+        if(pageCrossed)
+        {
+            uint8_t highByte = value;
+            finalAddress = (static_cast<uint16_t> (highByte) << 8) | addressLow;
+        }
+        else
+        {
+            uint8_t highByte = addressHigh & A & X;
+            finalAddress = (static_cast<uint16_t>(highByte) << 8) | addressLow;
+        }
         
-        bus->write(unstableAddress, value);
+        bus->write(finalAddress, value);
     }
     void MOS6502::executeSHX()
     {
         uint8_t value = X & (static_cast<uint8_t>(addressHigh + 1));
-        uint16_t unstableAddress = 
-            static_cast<uint16_t>(addressLow) |
-            (static_cast<uint16_t>(addressHigh) << 8);
+        bool pageCrossed = (addressLow < Y);
+
+        uint16_t finalAddress = 0;
+
+        if(pageCrossed)
+        {
+            uint8_t highByte = value;
+            finalAddress = finalAddress = (static_cast<uint16_t>(highByte) << 8) | addressLow;
+        }
+        else
+        {
+            uint8_t highByte = static_cast<uint8_t>(addressHigh) & X;
+            finalAddress = (static_cast<uint16_t>(highByte) << 8) | addressLow;
+        }
         
-        bus->write(unstableAddress, value);
+        bus->write(finalAddress, value);
     }
     void MOS6502::executeSHY()
     {
         uint8_t value = Y & (static_cast<uint8_t>(addressHigh + 1));
-        uint16_t unstableAddress = 
-            static_cast<uint16_t>(addressLow) |
-            (static_cast<uint16_t>(addressHigh) << 8);
+        bool pageCrossed = (addressLow < X);
+
+        uint16_t finalAddress = 0;
+
+        if(pageCrossed)
+        {
+            uint8_t highByte = value;
+            finalAddress = finalAddress = (static_cast<uint16_t>(highByte) << 8) | addressLow;
+        }
+        else
+        {
+            uint8_t highByte = static_cast<uint8_t>(addressHigh) & Y;
+            finalAddress = (static_cast<uint16_t>(highByte) << 8) | addressLow;
+        }
         
-        bus->write(unstableAddress, value);
+        bus->write(finalAddress, value);
     }
 
     void MOS6502::executeTAS()
@@ -1688,11 +1721,22 @@ namespace NES::CPU
         S = A & X;
         uint8_t value = S & (static_cast<uint8_t>(addressHigh + 1));
 
-        uint16_t unstableAddress = 
-            static_cast<uint16_t>(addressLow) |
-            (static_cast<uint16_t>(addressHigh) << 8);
+        bool pageCrossed = (addressLow < Y);
 
-        bus->write(unstableAddress, value);
+        uint16_t finalAddress = 0;
+
+        if(pageCrossed)
+        {
+            uint8_t highByte = value;
+            finalAddress = finalAddress = (static_cast<uint16_t>(highByte) << 8) | addressLow;
+        }
+        else
+        {
+            uint8_t highByte = static_cast<uint8_t>(addressHigh) & S;
+            finalAddress = (static_cast<uint16_t>(highByte) << 8) | addressLow;
+        }
+
+        bus->write(finalAddress, value);
     }
     void MOS6502::executeLAS()
     {
