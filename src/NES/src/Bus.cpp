@@ -1,6 +1,7 @@
 #include <NES/Bus/Bus.h>
 #include <random>
 #include <cstdint>
+#include <iostream>
 
 namespace NES
 {
@@ -162,10 +163,13 @@ namespace NES
     {
         addr = normalizeAddress(addr);
 
+        bool hubo = 0;
+
         for(Device *device: devices)
         {
             if(device -> handles(addr))
             {
+                hubo = 1;
                 uint8_t value = device -> read(addr);
 
                 value = applyReadMasks(addr, value);
@@ -175,6 +179,8 @@ namespace NES
                 return value;
             }
         }
+
+        if(!hubo) std::cout << "NO hubo un device para la dirección: " << addr << "\n";
         return openBus.getValue();
     }
 

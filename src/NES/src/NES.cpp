@@ -51,18 +51,12 @@ namespace NES
     void NES::clock()
     {
         ppu.clock();
-        if(!mainBus.isDMARunning())
+        if(masterClock % 3 == 0)
         {
-            if(masterClock % 3 == 0)
-            {
-                cpu.clock();
-                apu.clock();
+            apu.clock();
 
-            }
-        }
-        else
-        {
-            mainBus.countDownDMA();
+            if(!mainBus.isDMARunning()) cpu.clock();
+            else mainBus.countDownDMA();
         }
 
         masterClock++;
@@ -201,7 +195,22 @@ namespace NES
         file << "w -> " << std::hex << std::uppercase << std::setfill('0') << std::setw(2) 
                 << static_cast<int>(ppu.debugW()) << "\n";
 
+        file << "Cartridge data:\n";
+
+        for(uint16_t i = 0x6000; i <= 0x07FFF; ++i)
+        {
+            if(!(i & (0x00FF)))
+                file << "\nPage: " << i << ", " << i + 0x00FF << ":\n";
+
+            if(!(i & (0x000F)))
+                file << "\n";
+
+            file << std::hex << std::uppercase << std::setfill('0') << std::setw(2) 
+                << static_cast<int>(mainBus.read(i)) << " "; 
+        }
+
         file.close();
+
     }
 
     void NES::debugNMI()

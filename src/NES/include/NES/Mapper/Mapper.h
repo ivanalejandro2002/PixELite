@@ -2,6 +2,8 @@
 #include <cstdint>
 #include <vector>
 
+#include <NES/PPU/Mirroring.h>
+
 namespace NES
 {
     class Mapper
@@ -22,5 +24,7 @@ namespace NES
             virtual bool ppuMapWrite(uint16_t addr, uint32_t& mappedAddr) = 0;
 
             virtual void notifyPpuaddress(uint16_t addr) {}
+
+            virtual Mirroring getMapperMirroring() const { return Mirroring::Vertical; }
     };
 }

@@ -16,7 +16,8 @@ namespace NES
 
     uint8_t PPURegisters::read(uint16_t addr)
     {
-        return ppu.readRegister(addr);
+        uint16_t normalizedAddr = 0x2000 + (addr & 0x0007);
+        return ppu.readRegister(normalizedAddr);
     }
 
     void PPURegisters::write(
@@ -30,7 +31,9 @@ namespace NES
             ppu.getMainBus()->startDMA(513);
             return;
         }
-        ppu.writeRegister(addr, value);
+        uint16_t normalizedAddr = 0x2000 + (addr & 0x0007);
+        ppu.writeRegister(normalizedAddr, value);
+        
     }
 
     void PPURegisters::connectMainBus(Bus *bus) {ppu.connectMainBus(bus);}

@@ -746,7 +746,6 @@ namespace NES::CPU
             return;
         }
 
-        addressHigh = static_cast<uint8_t>(addressHigh >> 8);
         currentInstruction->insertNext(MicroOperation::ReadOperandAndExecute);
 
     }
@@ -768,7 +767,7 @@ namespace NES::CPU
         address =
             static_cast<uint16_t>(
                 (address & 0xFF00) |
-                static_cast<uint8_t>(address + 1)
+                static_cast<uint8_t>(addressLow)
             );
     }
     void MOS6502::fetchAddressHigh()
@@ -805,6 +804,9 @@ namespace NES::CPU
 
         addressLow = static_cast<uint8_t>(lowerSum & 0xFF);
 
+        uint16_t wrongAddress = addressLow | (static_cast<uint16_t>(addressHigh) << 8);
+        if(pageCrossed) data = bus->read(wrongAddress);
+
         address =
             static_cast<uint16_t>(addressLow) |
             (static_cast<uint16_t>(addressHigh + pageCrossed) << 8);
@@ -821,6 +823,9 @@ namespace NES::CPU
         bool pageCrossed = (lowerSum & 0x100) != 0;
 
         addressLow = static_cast<uint8_t>(lowerSum & 0xFF);
+
+        uint16_t wrongAddress = addressLow | (static_cast<uint16_t>(addressHigh) << 8);
+        if(pageCrossed) data = bus->read(wrongAddress);
 
         address =
             static_cast<uint16_t>(addressLow) |
@@ -858,6 +863,9 @@ namespace NES::CPU
         bool pageCrossed = (lowerSum & 0x100) != 0;
 
         addressLow = static_cast<uint8_t>(lowerSum & 0xFF);
+
+        uint16_t wrongAddress = addressLow | (static_cast<uint16_t>(addressHigh) << 8);
+        data = bus->read(wrongAddress);
 
         address =
             static_cast<uint16_t>(addressLow) |
@@ -1278,18 +1286,26 @@ namespace NES::CPU
     void MOS6502::executeTAX()
     {
         X = A;
+        status.setFlag(StatusRegister::Z, (X == 0));
+        status.setFlag(StatusRegister::N, (X & (1<<7)) != 0);
     }
     void MOS6502::executeTAY()
     {
         Y = A;
+        status.setFlag(StatusRegister::Z, (Y == 0));
+        status.setFlag(StatusRegister::N, (Y & (1<<7)) != 0);
     }
     void MOS6502::executeTXA()
     {
         A = X;
+        status.setFlag(StatusRegister::Z, (A == 0));
+        status.setFlag(StatusRegister::N, (A & (1<<7)) != 0);
     }
     void MOS6502::executeTYA()
     {
         A = Y;
+        status.setFlag(StatusRegister::Z, (Y == 0));
+        status.setFlag(StatusRegister::N, (Y & (1<<7)) != 0);
     }
 
     void MOS6502::executeADC()
@@ -1499,7 +1515,7 @@ namespace NES::CPU
     }
     void MOS6502::executeBVS()
     {
-        if(status.getFlag(StatusRegister::C))
+        if(status.getFlag(StatusRegister::V))
             currentInstruction->insertNext(
                 MicroOperation::EvaluateBranch
             );
@@ -1517,6 +1533,8 @@ namespace NES::CPU
     void MOS6502::executeTSX()
     {
         X = S;
+        status.setFlag(StatusRegister::Z, (X == 0));
+        status.setFlag(StatusRegister::N, (X & (1<<7)) != 0);
     }
 
     void MOS6502::executeCLC()
@@ -1588,7 +1606,7 @@ namespace NES::CPU
         A = data;
 
         status.setFlag(StatusRegister::Z, data==0);
-        status.setFlag(StatusRegister::N, (data & (0x80) != 0));
+        status.setFlag(StatusRegister::N, (data & 0x80) != 0);
     }
     void MOS6502::executeDCP()
     {

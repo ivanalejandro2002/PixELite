@@ -58,6 +58,8 @@ namespace NES{
             bool hasBatteryBackedRAM() const {return hasBattery;}
             bool hasActiveTrainer() const {return hasTrainer;}
 
+            Mirroring getActiveMirroring() const;
+
         private:
             std::vector<uint8_t> prgRom;
             std::vector<uint8_t> chrRom;

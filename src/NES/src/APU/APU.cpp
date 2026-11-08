@@ -117,7 +117,8 @@ namespace NES
     {
         pendingFrameCounterReset = true;
         pendingFrameCounterValue = value;
-        frameCounterResetDelay = 4; 
+        bool targetFiveStep = (value & 0x80) != 0;
+        frameCounterResetDelay = targetFiveStep ? 3 : 4; 
     }
 
     void APU::clock()
@@ -144,7 +145,7 @@ namespace NES
                 cpuCycleCount = 0;
                 frameStep = 0;
 
-                if (fiveStepMode)
+                if(fiveStepMode)
                 {
                     // This immediate clock now fires exactly on target without failing early metrics!
                     pulse1.clockEnvelope();
@@ -160,6 +161,7 @@ namespace NES
                     pulse1.clockSweep();
                     pulse2.clockSweep();
                 }
+                if(fiveStepMode) return;
             }
         }
 
@@ -176,11 +178,12 @@ namespace NES
 
         cpuCycleCount++;
 
-        const uint32_t CYCLES_PER_STEP = 7457;
+        static const uint32_t FOUR_STEP_TIMINGS[4] = { 7457, 14913, 22371, 29829 };
+        static const uint32_t FIVE_STEP_TIMINGS[5] = { 7457, 14913, 22371, 29829, 37281 };
+        uint32_t targetCycles = !fiveStepMode ? FOUR_STEP_TIMINGS[frameStep] : FIVE_STEP_TIMINGS[frameStep];
 
-        if(cpuCycleCount >= CYCLES_PER_STEP)
+        if(cpuCycleCount >= targetCycles)
         {
-            cpuCycleCount -= CYCLES_PER_STEP;
 
             if(!fiveStepMode)
             {
@@ -235,20 +238,23 @@ namespace NES
                 }
 
                 frameStep = (frameStep + 1)% 4;
+
+                if (frameStep == 0)
+                {
+                    cpuCycleCount -= 29830;
+                }
             }
             else
             {
                 switch(frameStep)
                 {
                     case 0:
-                    case 2:
                         pulse1.clockEnvelope();
                         pulse2.clockEnvelope();
                         triangle.clockLinearCounter();
                         noise.clockEnvelope();
                         break;
                     case 1:
-                    case 3:
                         pulse1.clockEnvelope();
                         pulse2.clockEnvelope();
                         triangle.clockLinearCounter();
@@ -262,10 +268,37 @@ namespace NES
                         pulse1.clockSweep();
                         pulse2.clockSweep();
                         break;
+
+                    case 2:
+                        pulse1.clockEnvelope();
+                        pulse2.clockEnvelope();
+                        triangle.clockLinearCounter();
+                        noise.clockEnvelope();
+                        break;
+
+                    case 3:
+                        break;
                     case 4:
+                        pulse1.clockEnvelope();
+                        pulse2.clockEnvelope();
+                        triangle.clockLinearCounter();
+                        noise.clockEnvelope();
+
+                        pulse1.clockLengthCounter();
+                        pulse2.clockLengthCounter();
+                        triangle.clockLengthCounter();
+                        noise.clockLengthCounter();
+
+                        pulse1.clockSweep();
+                        pulse2.clockSweep();
                         break;
                 }
                 frameStep = (frameStep + 1) % 5;
+
+                if (frameStep == 0)
+                {
+                    cpuCycleCount -= 37282;
+                }
             }
         }
     }

@@ -396,9 +396,36 @@ int main()
     }
 
 
+    // AccuracyTesting CPU:
+    // nes.loadROM("../NESROMS/accuracy testings/branch_timing_tests/1.Branch_Basics.nes");
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/instr_test-v5/official_only.nes");
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/instr_test-v5/all_instrs.nes");
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/instr_timing/instr_timing.nes");
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/cpu_timing_test6/cpu_timing_test.nes"); X
+
+    // AccuracyTesting PPU
+    // nes.loadROM("../NESROMS/accuracy testings/PPU/palette.nes");
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/blargg_ppu_tests_2005.09.15b/palette_ram.nes");
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/blargg_ppu_tests_2005.09.15b/power_up_palette.nes");
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/blargg_ppu_tests_2005.09.15b/sprite_ram.nes");
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/blargg_ppu_tests_2005.09.15b/vbl_clear_time.nes");
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/blargg_ppu_tests_2005.09.15b/vram_access.nes");
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/full_nes_palette.nes");
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/nmi_sync/demo_ntsc.nes");
+    // nes.loadROM("../NESROMS/accuracy testings/ntsc_torture.nes"); ???
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/ppu_open_bus/ppu_open_bus.nes");
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/sprite_hit_tests_2005.10.05/02.alignment.nes");
+
+
 
     // nes.loadROM("../NESROMS/oficial/BestNESGames/DuckTales (USA).nes");
-    nes.loadROM("../NESROMS/AccuracyCoin-main/AccuracyCoin.nes");
+    // nes.loadROM("../NESROMS/oficial/BestNESGames/Dig Dug (Japan).nes");
+    // nes.loadROM("../NESROMS/oficial/BestNESGames/Zelda/Legend of Zelda, The (USA) (Rev 1).nes");
+    // nes.loadROM("../NESROMS/oficial/BestNESGames/Metroid (USA).nes");
+    // nes.loadROM("../NESROMS/oficial/BestNESGames/Mario/Super Mario Bros. (World).nes");
+    // nes.loadROM("../NESROMS/oficial/BestNESGames/Lemmings (USA).nes");
+    // nes.loadROM("../NESROMS/oficial/BestNESGames/Mega Man/Mega Man (USA).nes");
+    // nes.loadROM("../NESROMS/AccuracyCoin-main/AccuracyCoin.nes");
 
 
     for (int i = 0; i < 8; ++i) {
@@ -595,17 +622,17 @@ int main()
         {
             debugFrames = 0;
 
-            std::cout
-                << "Emulation: " << emulationMs << " ms"
-                << " | Ring: " << ringAfter << " samples"
-                << " | Extracted: " << extracted << " samples"
-                << " | SDL: "
-                << (1000.0 * sdlSamplesAfter / SAMPLE_RATE) << " ms"
-                << " | Total latency: " << latencyAfterMs << " ms"
-                << " | DRC: " << drcRatio
-                << " | Audio submitted: "
-                << (audioSubmitted ? "OK" : "FAILED")
-                << '\n';
+            // std::cout
+            //     << "Emulation: " << emulationMs << " ms"
+            //     << " | Ring: " << ringAfter << " samples"
+            //     << " | Extracted: " << extracted << " samples"
+            //     << " | SDL: "
+            //     << (1000.0 * sdlSamplesAfter / SAMPLE_RATE) << " ms"
+            //     << " | Total latency: " << latencyAfterMs << " ms"
+            //     << " | DRC: " << drcRatio
+            //     << " | Audio submitted: "
+            //     << (audioSubmitted ? "OK" : "FAILED")
+            //     << '\n';
         }
 
 
