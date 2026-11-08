@@ -8,7 +8,7 @@ namespace NES {
             case 0:
                 return std::make_unique<Mapper0>(prgBanks, chrBanks);
             case 1:
-                // return std::make_unique<Mapper1>(prgBanks, chrBanks);
+                return std::make_unique<Mapper1>(prgBanks, chrBanks);
                 break;
             case 2:
                 return std::make_unique<Mapper2>(prgBanks, chrBanks);

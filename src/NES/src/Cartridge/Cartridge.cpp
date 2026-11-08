@@ -1,30 +1,54 @@
 #include <NES/Cartridge/Cartridge.h>
 #include <NES/Mapper/MapperFactory.h>
 
+#include <fstream>
+#include <filesystem>
+
 namespace NES
 {
     Cartridge::Cartridge(){};
 
     bool Cartridge::handles(uint16_t addr) const {
         // El cartucho responde al rango de PRG del CPU (y opcionalmente RAM de batería $6000-$7FFF)
-        return addr >= 0x8000 && addr <= 0xFFFF;
+        return (addr >= 0x8000 && addr <= 0xFFFF) ||
+                (addr >= 0x6000 && addr <= 0x7FFF);
     }
 
     uint8_t Cartridge::read(uint16_t addr) {
-        uint32_t mappedAddr = 0;
-        if (mapper && mapper->cpuMapRead(addr, mappedAddr)) {
-            if (mappedAddr < prgRom.size()) {
-                return prgRom[mappedAddr];
+        if (addr >= 0x6000 && addr <= 0x7FFF) {
+            // Leer de la PRG-RAM del cartucho (ajustando la dirección base a 0)
+            if (!prgRam.empty()) {
+                return prgRam[addr - 0x6000];
+            }
+            return 0;
+        }
+        
+        if (addr >= 0x8000 && addr <= 0xFFFF) {
+            uint32_t mappedAddr = 0;
+            if (mapper && mapper->cpuMapRead(addr, mappedAddr)) {
+                if (mappedAddr < prgRom.size()) {
+                    return prgRom[mappedAddr];
+                }
             }
         }
         return 0;
     }
 
     void Cartridge::write(uint16_t addr, uint8_t value) {
-        uint32_t mappedAddr = 0;
-        if (mapper) {
-            // El mapper procesa la escritura (cambio de banco o registros)
-            mapper->cpuMapWrite(addr, mappedAddr, value);
+        if (addr >= 0x6000 && addr <= 0x7FFF) {
+            // Escribir en la PRG-RAM del cartucho
+            if (!prgRam.empty()) {
+                prgRam[addr - 0x6000] = value;
+            }
+            return;
+        }
+
+        if (addr >= 0x8000 && addr <= 0xFFFF) {
+            uint32_t mappedAddr = 0;
+            if (mapper) {
+                // El mapper procesa la escritura (cambio de banco o registros del MMC1)
+                mapper->cpuMapWrite(addr, mappedAddr, value);
+            }
         }
     }
 
@@ -157,6 +181,22 @@ namespace NES
         {
             prgRom.resize(prgSize);
             file.read(reinterpret_cast<char*>(prgRom.data()), prgSize);
+
+            std::filesystem::path rootPath(PROJECT_ROOT_DIR);
+
+            std::filesystem::path realPath = rootPath / "debugs" / "PRGROM.out";
+
+            std::filesystem::create_directories(realPath.parent_path()); 
+            
+            std::ofstream fout(realPath);
+            for(int i = 0; i < prgSize; ++i)
+            {
+                if(!(i & 0x00FF))fout << "\n" << ((i & 0xFF00) >> 8) << ":\n";
+
+                if(!(i & 0x000F))fout << "\n" << ((i & 0x00F0) >> 4) << ": ";
+                fout << std::hex << std::uppercase << std::setfill('0') << std::setw(2) 
+                << static_cast<int>(prgRom[i]) << " "; 
+            }
         }
         else
         {
@@ -175,12 +215,22 @@ namespace NES
             chrRom.resize(allocatedChrRam, 0);
         }
 
+        size_t totalPrgRamSize = prgRamSize + prgNvRamSize;
+
+        if (totalPrgRamSize == 0 && mapperNumber == 1) {
+            totalPrgRamSize = 8192; // 8 KB estándar de trabajo
+        }
+
+        if (totalPrgRamSize > 0) {
+            prgRam.resize(totalPrgRamSize, 0);
+        }
+
         std::cout << "[Cartridge] Archivo analizado correctamente:\n"
                     << "  - Estándar detectado: " << (isNes20 ? "NES 2.0" : "iNES Clásico") << "\n"
                     << "  - Mapper ID: " << mapperNumber << (isNes20 ? " (Submapper: " + std::to_string(subMapperNumber) + ")" : "") << "\n"
                     << "  - PRG-ROM Size: " << prgSize / 1024 << " KB\n"
                     << "  - CHR Size: " << (chrSize > 0 ? std::to_string(chrSize / 1024) + " KB (ROM)" : std::to_string(chrRom.size() / 1024) + " KB (RAM)") << "\n"
-                    << "  - PRG-RAM / NVRAM: " << (prgRamSize + prgNvRamSize) << " bytes (Batería: " << (hasBattery ? "Sí" : "No") << ")\n"
+                    << "  - PRG-RAM / NVRAM: " << (totalPrgRamSize) << " bytes (Batería: " << (hasBattery ? "Sí" : "No") << ")\n"
                     << "  - Trainer: " << (hasTrainer ? "Presente (512 bytes)" : "Ausente") << "\n"
                     << "  - Mirroring: " << (mirroring == Mirroring::Vertical ? "Vertical" : (mirroring == Mirroring::Horizontal ? "Horizontal" : "4-Screen")) << "\n"
                     << (isNes20 ? "  - Región de Hardware: " + std::string(timing == ConsoleTiming::NTSC ? "NTSC" : timing == ConsoleTiming::PAL ? "PAL" : "Dendy/Multiple") + "\n" : "");
@@ -204,5 +254,12 @@ namespace NES
     {
         if(shiftCount == 0) return 0;
         return static_cast<size_t>(64) << shiftCount;
+    }
+
+    Mirroring Cartridge::getActiveMirroring() const {
+        if (mapper) {
+            return mapper->getMapperMirroring(); // Llama al método exclusivo del mapper
+        }
+        return mirroring; // Valor por defecto del header iNES
     }
 }

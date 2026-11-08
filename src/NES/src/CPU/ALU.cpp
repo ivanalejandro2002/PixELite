@@ -73,9 +73,9 @@ namespace NES::CPU
         uint8_t flags = 0;
         if(!result)
             flags |= ALUResult::FlagMask::Z;
-        if(result & (0x40))
+        if(b & (0x40))
             flags |= ALUResult::FlagMask::V;
-        if(result & (0x80))
+        if(b & (0x80))
             flags |= ALUResult::FlagMask::N;
 
 

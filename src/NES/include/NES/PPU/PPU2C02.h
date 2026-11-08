@@ -147,6 +147,7 @@ namespace NES
                 uint8_t readBuffer;
 
                 uint8_t ioLatch;
+                uint32_t openBusTimer = 0;
 
                 uint16_t bgPatternShiftLow = 0;
                 uint16_t bgPatternShiftHigh = 0;

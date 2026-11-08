@@ -447,6 +447,15 @@ namespace NES
     {
         ++cycle;
 
+        if (openBusTimer > 0)
+        {
+            openBusTimer--;
+            if (openBusTimer == 0)
+        {
+                ioLatch = 0x00; // El bus abierto decae a cero tras 1 segundo sin uso
+            }
+        }
+
         const bool renderingEnabled = (PPUMASK & 0x18) != 0;
         const bool visibleScanLine = scanline >= 0 && scanline < 240;
         const bool preRenderScanLine = scanline == -1;
@@ -596,6 +605,26 @@ namespace NES
             if(preRenderScanLine && cycle >= 280 && cycle <= 304) transferAddressY();
         }
 
+        if(visibleScanLine && cycle >= 1 && cycle <= 256)
+        {
+            if(renderingEnabled) {
+                renderPixel();
+            } else {
+                // Si el renderizado está apagado, la pantalla muestra el color de fondo universal ($3F00)
+                int x = cycle - 1;
+                int y = scanline;
+                uint16_t paletteAddr = 0x3F00 | (v & 0x001F);
+                uint8_t colorIndex = readVRAM(paletteAddr) & 0x3F;
+
+                if(PPUMASK & 0x01) colorIndex &= 0x30; // Escala de grises si está activa
+                
+                const auto& color = nesPalette[colorIndex];
+                const auto emphasizedColor = applyColorEmphasis(color);
+
+                frameBuffer.setPixel(x, y, emphasizedColor[0], emphasizedColor[1], emphasizedColor[2]);
+            }
+        }
+
         uint16_t cyclesPerScanline = 341;
 
         if(scanline == -1 && renderingEnabled && oddFrame)
@@ -631,6 +660,7 @@ namespace NES
     uint8_t PPU2C02::readRegister(uint16_t addr)
     {
         uint8_t value = ioLatch;
+        bool refreshDecay = false;
 
         switch(addr & 0x0007)
         {
@@ -644,6 +674,7 @@ namespace NES
             // OAMDATA
             case 0x0004:
                 value = readOAMDATA();
+                refreshDecay = true;
                 break;
 
             // PPUDATA
@@ -656,6 +687,7 @@ namespace NES
                 {
                     value = (value & 0x3F) | (ioLatch & 0xC0);
                 }
+                refreshDecay = true;
                 break;
             }
 
@@ -663,13 +695,16 @@ namespace NES
                 break;
         }
 
+
         ioLatch = value;
+        if(refreshDecay) openBusTimer = 5369318;
         return value;
     }
 
     void PPU2C02::writeRegister(uint16_t addr, uint8_t value)
     {
         ioLatch = value;
+        openBusTimer = 5369318;
 
         switch(addr & 0x0007)
         {
@@ -771,7 +806,7 @@ namespace NES
 
         if((OAMADDR & 0x03) == 0x02)
         {
-            value = (value & 0xE3) | (ioLatch & 0x1C);
+            value = (value & 0xE3);
         }
         return value;
     }
@@ -889,6 +924,7 @@ namespace NES
 
         readBuffer = 0;
         ioLatch = 0;
+        openBusTimer = 0;
 
         OAM.fill(0);
 
