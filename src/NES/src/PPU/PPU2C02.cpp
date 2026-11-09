@@ -88,25 +88,30 @@ namespace NES
         }
     }
 
-    void PPU2C02::evaluateSingleSprite(uint8_t index, int targetScanline)
+    void PPU2C02::evaluateSingleSprite(uint8_t oamOffset, int targetScanline)
     {
         const uint8_t spriteHeight = (PPUCTRL & 0x20)? 16 : 8;
 
         if(nextScanlineSpriteCount < MAX_SPRITES_PER_SCANLINE)
         {
-            NES::PPU::Sprite sprite = getSprite(index);
+            // Construir sprite desde el offset exacto de OAM (soporta OAM desalineada)
+            NES::PPU::Sprite sprite = {
+                OAM[oamOffset & 0xFF],
+                OAM[(oamOffset + 1) & 0xFF],
+                OAM[(oamOffset + 2) & 0xFF],
+                OAM[(oamOffset + 3) & 0xFF],
+                (spriteEvaluationIndex == 0) // El primer sprite evaluado es el candidato a Sprite Zero
+            };
 
-            if(sprite.isOnScanline(static_cast<uint8_t>(targetScanline), spriteHeight))
+            if (sprite.isOnScanline(static_cast<uint8_t>(targetScanline), spriteHeight))
             {
-                // El primer sprite evaluado en esta scanline (spriteEvaluationIndex == 0) es el que se toma como sprite 0
-                sprite.isSpriteZero = (spriteEvaluationIndex == 0);
                 nextScanlineSprites[nextScanlineSpriteCount] = sprite;
                 ++nextScanlineSpriteCount;
             }
         }
         else
         {
-            uint8_t evalY = OAM[index * 4 + oamM];
+            uint8_t evalY = OAM[(oamOffset + oamM) & 0xFF];
 
             int startLine = static_cast<int>(evalY) + 1;
             int row = targetScanline - startLine;
@@ -477,15 +482,21 @@ namespace NES
             }
         }
 
-        if(preRenderScanLine && cycle == 1)
+        if(preRenderScanLine)
         {
-            // Limpiar Vblank y flags de sprite
-            PPUSTATUS &= 0x1F;
-            nextScanlineSpriteCount = 0;
-            oamM = 0;
-
-            // Liberación de la línea de NMI
-            mainBus->setNMILine(true);
+            if(cycle == 1)
+            {
+                // Limpiar Vblank y liberar NMI en cycle 1 (pasa VBlank End)
+                PPUSTATUS &= 0x7F;
+                nextScanlineSpriteCount = 0;
+                oamM = 0;
+                mainBus->setNMILine(true);
+            }
+            else if(cycle == 2)
+            {
+                // Limpiar Sprite 0 Hit y Sprite Overflow en cycle 2 (pasa Flag Timing)
+                PPUSTATUS &= 0x1F;
+            }
         }
 
         if(renderScanLine && renderingEnabled)
@@ -512,14 +523,60 @@ namespace NES
                 spriteEvaluationIndex = 0;
             }
 
+            if(cycle == 65)
+            {
+                oamM = 0; // Resetear m al inicio de la evaluación de sprites de cada scanline
+            }
+
             if(cycle >= 65 && cycle <= 256)
             {
                 oddCycle = !oddCycle;
 
                 if(oddCycle && spriteEvaluationIndex < 64)
                 {
-                    uint8_t spriteIndex = ((OAMADDR >> 2) + spriteEvaluationIndex) & 0x3F;
-                    evaluateSingleSprite(spriteIndex, scanline + 1);
+                    uint8_t oamOffset;
+
+                    // Si OAMADDR no está desalineado (caso estándar de casi todos los juegos):
+                    if ((OAMADDR & 0x03) == 0)
+                    {
+                        oamOffset = (OAMADDR + spriteEvaluationIndex * 4) & 0xFF;
+                    }
+                    else
+                    {
+                        // Manejo de OAM desalineada (Misaligned OAM):
+                        if (spriteEvaluationIndex == 0)
+                        {
+                            oamOffset = OAMADDR;
+                        }
+                        else
+                        {
+                            // Comprobar si el primer objeto evaluado estaba en rango
+                            uint8_t firstY = OAM[OAMADDR];
+                            int startLine = static_cast<int>(firstY) + 1;
+                            int row = (scanline + 1) - startLine;
+                            const uint8_t spriteHeight = (PPUCTRL & 0x20) ? 16 : 8;
+                            bool firstOnLine = (row >= 0 && row < spriteHeight);
+
+                            uint8_t realignedBase;
+                            if (firstOnLine)
+                            {
+                                // Si estaba en rango, se mantuvo desalineado
+                                realignedBase = (OAMADDR + 4) & 0xFF;
+                            }
+                            else
+                            {
+                                // Si estaba fuera de rango, se realinea a múltiplo de 4:
+                                if ((OAMADDR & 0x03) == 0x03)
+                                    realignedBase = (OAMADDR + 1) & 0xFC;
+                                else
+                                    realignedBase = (OAMADDR + 4) & 0xFC;
+                            }
+
+                            oamOffset = (realignedBase + (spriteEvaluationIndex - 1) * 4) & 0xFF;
+                        }
+                    }
+
+                    evaluateSingleSprite(oamOffset, scanline + 1);
                     ++spriteEvaluationIndex;
                 }
             }
@@ -527,6 +584,7 @@ namespace NES
             // Ciclos 257 a 320: Lectura anticipada de patrones para la SIGUIENTE scanline (scanline + 1)
             if (renderScanLine && cycle >= 257 && cycle <= 320)
             {
+                OAMADDR = 0;
                 int fetchStep = (cycle - 257) % 8;
                 int spriteIndex = (cycle - 257) / 8;
                 int targetScanline = scanline + 1;
@@ -802,6 +860,16 @@ namespace NES
     void PPU2C02::writeOAMADDR(uint8_t value)
     {
         OAMADDR = value;
+
+        const bool renderingEnabled = (PPUMASK & 0x18) != 0;
+        if (renderingEnabled && scanline >= 0 && scanline < 240)
+        {
+            uint8_t targetRow = value & 0xF8;
+            for (int i = 0; i < 8; ++i)
+            {
+                OAM[targetRow + i] = OAM[i];
+            }
+        }
     }
 
     // $2004 -> OAMDATA
@@ -905,13 +973,12 @@ namespace NES
     NES::PPU::Sprite PPU2C02::getSprite(uint8_t index) const
     {
         const uint16_t offset = static_cast<uint16_t>(index) * 4;
-
         return {
             OAM[offset],
             OAM[offset + 1],
             OAM[offset + 2],
             OAM[offset + 3],
-            (index == 0)
+            false
         };
     }
 

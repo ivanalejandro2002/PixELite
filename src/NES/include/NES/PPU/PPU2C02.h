@@ -32,7 +32,7 @@ namespace NES
                 void oamDma(uint8_t pageValue);
 
                 void evaluateSprites(uint8_t scanline);
-                void evaluateSingleSprite(uint8_t index, int targetScanline);
+                void evaluateSingleSprite(uint8_t oamOffset, int targetScanline);
 
                 uint8_t getSpritePixel(
                     const NES::PPU::Sprite& sprite,
