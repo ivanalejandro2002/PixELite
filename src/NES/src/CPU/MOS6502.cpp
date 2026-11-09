@@ -32,6 +32,89 @@ namespace NES::CPU
         bus = b;
     }
 
+    bool MOS6502::isWriteCycle() const
+    {
+        // Si la instrucción terminó, el siguiente ciclo será fetchOpcode() (Lectura)
+        if (!currentInstruction.has_value() || currentInstruction->finished())
+            return false;
+        return currentInstruction->isCurrentOperationWrite();
+    }
+    
+    uint16_t MOS6502::getCurrentBusAddress() const
+    {
+        // Si no hay instrucción o ya terminó, la CPU está apuntando al Program Counter (PC)
+        if (!currentInstruction.has_value() || currentInstruction->finished())
+            return PC;
+
+        MicroOperation op = currentInstruction->getCurrentOperationType();
+        switch (op)
+        {
+            // Ciclos donde la CPU lee del PC:
+            case MicroOperation::FetchOpcode:
+            case MicroOperation::FetchOpcodeAndDiscard:
+            case MicroOperation::FetchOpcodeDiscardAndExec:
+            case MicroOperation::FetchOperand:
+            case MicroOperation::FetchZeroPageAddress:
+            case MicroOperation::FetchAddressLow:
+            case MicroOperation::FetchAddressHigh:
+            case MicroOperation::FetchAddressHighExecute:
+            case MicroOperation::FetchAddressHighAddX:
+            case MicroOperation::FetchAddressHighAddY:
+            case MicroOperation::FetchBranch:
+            case MicroOperation::FetchAddressHighToPC:
+                return PC;
+
+            // Ciclos donde la CPU accede a la dirección efectiva (ej: $2002, $2007, $4015, $4016):
+            case MicroOperation::ReadOperand:
+            case MicroOperation::WriteOperand:
+            case MicroOperation::ReadOperandAndExecute:
+            case MicroOperation::DummyWrite:
+            case MicroOperation::FetchIndirectLow:
+            case MicroOperation::FetchIndirectHigh:
+            case MicroOperation::FetchIndirectHighAddY:
+            case MicroOperation::FetchIndirectHighExecute:
+                return address;
+
+            // Lecturas especulativas antes de cruzar página (Absolute, X / Y):
+            case MicroOperation::DummyRead:
+            case MicroOperation::ReadOperandVariable:
+                return static_cast<uint16_t>(addressLow) | (static_cast<uint16_t>(addressHigh) << 8);
+
+            // Accesos a la pila (Stack):
+            case MicroOperation::PushStatus:
+            case MicroOperation::PushPCHigh:
+            case MicroOperation::PushPCLow:
+            case MicroOperation::PushAccumulator:
+            case MicroOperation::PushStatusBRK:
+            case MicroOperation::PushStatusNMI:
+            case MicroOperation::PushStatusIRQ:
+            case MicroOperation::PullStatus:
+            case MicroOperation::PullPCLow:
+            case MicroOperation::PullPCHigh:
+            case MicroOperation::PullAccumulator:
+            case MicroOperation::PullStatusBRK:
+            case MicroOperation::StackPop:
+                return 0x0100 | static_cast<uint16_t>(S);
+
+            // Vectores de interrupción:
+            case MicroOperation::FetchInterruptVectorLow:
+                return 0xFFFE;
+            case MicroOperation::FetchInterruptVectorHigh:
+                return 0xFFFF;
+            case MicroOperation::FetchNMIVectorLow:
+                return 0xFFFA;
+            case MicroOperation::FetchNMIVectorHigh:
+                return 0xFFFB;
+            case MicroOperation::FetchStartingLow:
+                return 0xFFFC;
+            case MicroOperation::FetchStartingHigh:
+                return 0xFFFD;
+
+            default:
+                return address;
+        }
+    }
+
     void MOS6502::clock()
     {
         if(isJammed)return;

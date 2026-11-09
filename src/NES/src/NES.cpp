@@ -22,7 +22,8 @@ namespace NES
             [this]() { return apu.getDMC().isDMARequested(); },
             [this]() { return apu.getDMC().getDMAAddress(); },
             [this](uint8_t sample) { apu.getDMC().deliverDMASample(sample); },
-            [this]() { apu.clearFrameIRQ(); }
+            [this]() { apu.clearFrameIRQ(); },
+            [this]() {return cpu.getCurrentBusAddress();}
         });
 
         mainBus.addDevice(&ram);
@@ -62,17 +63,20 @@ namespace NES
         {
             apu.clock();
 
-            if(mainBus.isDMCRunning() || apu.getDMC().isDMARequested())
+            bool cpuWriting = cpu.isWriteCycle();
+
+            // El DMA solo puede pausar a la CPU si NO está en ciclo de escritura:
+            if((mainBus.isDMCRunning() || apu.getDMC().isDMARequested()) && !cpuWriting)
             {
                 mainBus.clockDMCDMA();
             }
-            else if(mainBus.isDMAActive())
+            else if(mainBus.isDMAActive() && !cpuWriting)
             {
                 mainBus.clockDMA();
             }
             else
             {
-                cpu.clock();
+                cpu.clock(); // La CPU ejecuta su ciclo de escritura normalmente
             }
 
             mainBus.totalCpuCycles++;

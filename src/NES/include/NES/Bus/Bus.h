@@ -70,6 +70,7 @@ namespace NES
                 std::function<uint16_t()> getAddress;
                 std::function<void(uint8_t)> deliverSample;
                 std::function<void()> onFrameConflict; // Para limpiar el Frame IRQ si lee $xx15
+                std::function<uint16_t()> getCpuAddress;
             };
 
             void setDMCHandler(DMCHandler handler) { dmcHandler = handler; }

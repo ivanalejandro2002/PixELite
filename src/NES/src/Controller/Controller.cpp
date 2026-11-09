@@ -19,7 +19,7 @@ namespace NES
         uint8_t response = shiftRegister & 0x01;
         shiftRegister >>= 1;
 
-        return response | 0x40;
+        return response;
     }
 
     void Controller::write(uint16_t addr, uint8_t data)

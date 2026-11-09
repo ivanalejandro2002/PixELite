@@ -35,6 +35,9 @@ namespace NES::CPU
             MicroOperation getBack() const;
             bool pollable() const;
 
+            bool isCurrentOperationWrite() const;
+            MicroOperation getCurrentOperationType() const;
+
             private:
             AddressingMode addressingMode;
             InstructionOperation operation;

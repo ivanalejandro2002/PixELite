@@ -144,7 +144,8 @@ namespace NES
             if (dmcHandler.isRequested && dmcHandler.isRequested()) {
                 dmcReadAddress = dmcHandler.getAddress();
                 // 1er ciclo (Halt): La CPU se detiene y repite la lectura en el bus
-                this->read(cpuLastReadAddress);
+                uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
+                this->read(targetAddr);
                 // El ciclo 1 ya fue Halt, así que el ciclo 2 será Dummy:
                 dmcState = DMCDMAState::Dummy;
             }
@@ -154,8 +155,10 @@ namespace NES
         switch (dmcState)
         {
             case DMCDMAState::Dummy:
+            {
                 // 2do ciclo (Dummy): La CPU vuelve a repetir la lectura en el bus
-                this->read(cpuLastReadAddress);
+                uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
+                this->read(targetAddr);
 
                 // Si el ciclo actual es par, el siguiente es impar (Put) -> requiere Alignment
                 // Si el ciclo actual es impar, el siguiente es par (Get) -> va directo a Get
@@ -165,25 +168,46 @@ namespace NES
                     dmcState = DMCDMAState::Get;
                 }
                 break;
+            }
 
             case DMCDMAState::Alignment:
+            {
                 // 3er ciclo opcional (Alignment): La CPU vuelve a repetir la lectura en el bus
-                this->read(cpuLastReadAddress);
+                uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
+                this->read(targetAddr);
                 dmcState = DMCDMAState::Get;
                 break;
+            }
 
             case DMCDMAState::Get:
             {
-                // 4to ciclo (Get): El DMA toma el bus y lee la muestra de la ROM
-                uint8_t sample = this->read(dmcReadAddress);
+                uint16_t currentCpuAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
 
-                // Refleja la muestra en Open Bus
-                openBus.update(sample);
+                // Dirección combinada del die del 2A03 entre el bus de CPU y DMA
+                uint16_t combinedAddr = (currentCpuAddr & 0xFFE0) | (dmcReadAddress & 0x001F);
 
-                // Conflicto de bus del 2A03: si termina en $15, limpia Frame IRQ
-                if ((dmcReadAddress & 0x1F) == 0x15 && dmcHandler.onFrameConflict) {
-                    dmcHandler.onFrameConflict();
+                uint8_t sample = 0;
+
+                // Conflicto de bus con $4015: el 2A03 lee $4015 y sustituye la muestra del DMA
+                if (combinedAddr == 0x4015 || (dmcReadAddress & 0x1F) == 0x15)
+                {
+                    // Leer $4015 directamente: esto limpia el Frame IRQ y libera la línea IRQ en APU::read()
+                    sample = this->read(0x4015);
                 }
+                // Conflicto de bus con $4016 (puerto de mandos)
+                else if (combinedAddr == 0x4016 || (dmcReadAddress & 0x1F) == 0x16)
+                {
+                    uint8_t romByte = this->read(dmcReadAddress);
+                    uint8_t joyByte = this->read(0x4016);
+                    sample = romByte & joyByte; // Colisión en el bus de datos
+                }
+                else
+                {
+                    // Lectura normal de la muestra desde la ROM
+                    sample = this->read(dmcReadAddress);
+                }
+
+                openBus.update(sample);
 
                 if (dmcHandler.deliverSample) {
                     dmcHandler.deliverSample(sample);
@@ -264,14 +288,16 @@ namespace NES
         }
         addr = normalizeAddress(addr);
 
-        bool hubo = 0;
-
         for(Device *device: devices)
         {
             if(device -> handlesRead(addr))
             {
-                hubo = 1;
                 uint8_t value = device -> read(addr);
+
+                if(addr == 0x4016 || addr == 0x4017)
+                {
+                    value = (openBus.getValue() & 0xE0) | (value & 0x1F);
+                }
 
                 value = applyReadMasks(addr, value);
 
@@ -281,7 +307,6 @@ namespace NES
             }
         }
 
-        if(!hubo) std::cout << "NO hubo un device para la dirección: " << addr << "\n";
         return openBus.getValue();
     }
 

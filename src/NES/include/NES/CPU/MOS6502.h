@@ -22,8 +22,13 @@ namespace NES::CPU
 
             void connectBus(Bus *b);
 
+            bool isWriteCycle() const;
+
             void finishInstruction();
             void execute(MicroOperation operation);
+
+            uint16_t getCurrentAddress() const {return address;}
+            uint16_t getCurrentBusAddress() const;
 
             void mock();
 

@@ -87,6 +87,33 @@ namespace NES::CPU
                 operations[operations.size() - 2] == MicroOperation::ReadOperandVariable;
     }
 
+    bool Instruction::isCurrentOperationWrite() const
+    {
+        if (finished()) return false;
+        MicroOperation op = operations[currentOperation];
+        switch (op)
+        {
+            case MicroOperation::WriteOperand:
+            case MicroOperation::DummyWrite:
+            case MicroOperation::PushStatus:
+            case MicroOperation::PushPCHigh:
+            case MicroOperation::PushPCLow:
+            case MicroOperation::PushAccumulator:
+            case MicroOperation::PushStatusBRK:
+            case MicroOperation::PushStatusNMI:
+            case MicroOperation::PushStatusIRQ:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    MicroOperation Instruction::getCurrentOperationType() const
+    {
+        if (finished()) return MicroOperation::FetchOpcode;
+        return operations[currentOperation];
+    }
+
     void Instruction::printInstruction()
     {
         std::cout << "Addressing Mode: " << AddressingModeMapper::ToString(addressingMode) << "\n";
