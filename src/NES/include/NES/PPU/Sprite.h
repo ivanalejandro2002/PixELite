@@ -13,6 +13,7 @@ namespace NES
             uint8_t tileIndex = 0;
             uint8_t attributes = 0;
             uint8_t x = 0;
+            bool isSpriteZero = false;
 
             uint8_t palette() const
             {
@@ -41,18 +42,15 @@ namespace NES
 
             int getRowInSprite(uint8_t currentScanline, uint8_t spriteHeight) const
             {
-                uint16_t startLine = (y + 1) & 0xFF;
+                int startLine = static_cast<int>(y) + 1;
 
-                // Resta con signo normal: si currentScanline es menor que startLine, dará negativo.
-                int row = static_cast<int>(currentScanline) - static_cast<int>(startLine);
+                int row = static_cast<int>(currentScanline) - startLine;
 
-                // Si está fuera del rango del sprite, simplemente devuelve -1 (no se dibuja)
                 if (row < 0 || row >= spriteHeight)
                 {
                     return -1;
                 }
 
-                // Si el sprite tiene volteo vertical (Bit 7 de attributes), se invierte la fila
                 if (attributes & 0x80)
                 {
                     row = (spriteHeight - 1) - row;

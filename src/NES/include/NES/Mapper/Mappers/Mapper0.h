@@ -33,8 +33,11 @@ public:
 
     bool ppuMapWrite(uint16_t addr, uint32_t& mappedAddr) override {
         if (addr >= 0x0000 && addr <= 0x1FFF) {
-            mappedAddr = addr; // Permite escritura si se usa CHR-RAM
-            return true;
+            if(chrBanks == 0)
+            {
+                mappedAddr = addr; // Permite escritura si se usa CHR-RAM
+                return true;
+            }
         }
         return false;
     }

@@ -223,16 +223,14 @@ namespace NES
                         if (x < spriteX || x >= spriteX + 8) continue;
 
                         uint8_t localX = static_cast<uint8_t>(x - spriteX);
-                        int row = sprite.getRowInSprite(static_cast<uint8_t>(scanline), spriteHeight);
 
-                        if (row < 0) continue;
-
-                        uint8_t pixelValue = getSpritePixel(sprite, localX, static_cast<uint8_t>(row), i);
+                        // Obtener el píxel directamente desde los registros ya cargados
+                        uint8_t pixelValue = getSpritePixel(sprite, localX, 0, i);
                         if (pixelValue == 0) continue;
 
                         uint8_t color = getSpritePaletteColor(sprite, pixelValue);
                         bool behindBg = sprite.behindBackground();
-                        bool isSpriteZero = (i == 0); 
+                        bool isSpriteZero = sprite.isSpriteZero;
 
                         return {color, false, behindBg, isSpriteZero};
                     }

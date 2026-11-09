@@ -94,10 +94,12 @@ namespace NES
 
         if(nextScanlineSpriteCount < MAX_SPRITES_PER_SCANLINE)
         {
-            const NES::PPU::Sprite sprite = getSprite(index);
+            NES::PPU::Sprite sprite = getSprite(index);
 
             if(sprite.isOnScanline(static_cast<uint8_t>(targetScanline), spriteHeight))
             {
+                // El primer sprite evaluado en esta scanline (spriteEvaluationIndex == 0) es el que se toma como sprite 0
+                sprite.isSpriteZero = (spriteEvaluationIndex == 0);
                 nextScanlineSprites[nextScanlineSpriteCount] = sprite;
                 ++nextScanlineSpriteCount;
             }
@@ -106,7 +108,8 @@ namespace NES
         {
             uint8_t evalY = OAM[index * 4 + oamM];
 
-            int row = static_cast<int>(targetScanline) - static_cast<int>((evalY + 1) & 0xFF);
+            int startLine = static_cast<int>(evalY) + 1;
+            int row = targetScanline - startLine;
 
             bool onLine = (row >= 0 && row < spriteHeight);
 
@@ -515,7 +518,8 @@ namespace NES
 
                 if(oddCycle && spriteEvaluationIndex < 64)
                 {
-                    evaluateSingleSprite(spriteEvaluationIndex, scanline + 1);
+                    uint8_t spriteIndex = ((OAMADDR >> 2) + spriteEvaluationIndex) & 0x3F;
+                    evaluateSingleSprite(spriteIndex, scanline + 1);
                     ++spriteEvaluationIndex;
                 }
             }
@@ -605,24 +609,20 @@ namespace NES
             if(preRenderScanLine && cycle >= 280 && cycle <= 304) transferAddressY();
         }
 
-        if(visibleScanLine && cycle >= 1 && cycle <= 256)
+        if(visibleScanLine && cycle >= 1 && cycle <= 256 && !renderingEnabled)
         {
-            if(renderingEnabled) {
-                renderPixel();
-            } else {
-                // Si el renderizado está apagado, la pantalla muestra el color de fondo universal ($3F00)
-                int x = cycle - 1;
-                int y = scanline;
-                uint16_t paletteAddr = 0x3F00 | (v & 0x001F);
-                uint8_t colorIndex = readVRAM(paletteAddr) & 0x3F;
+            // Si el renderizado está apagado, la pantalla muestra el color de fondo universal ($3F00)
+            int x = cycle - 1;
+            int y = scanline;
+            uint16_t paletteAddr = 0x3F00 | (v & 0x001F);
+            uint8_t colorIndex = readVRAM(paletteAddr) & 0x3F;
 
-                if(PPUMASK & 0x01) colorIndex &= 0x30; // Escala de grises si está activa
-                
-                const auto& color = nesPalette[colorIndex];
-                const auto emphasizedColor = applyColorEmphasis(color);
+            if(PPUMASK & 0x01) colorIndex &= 0x30; // Escala de grises si está activa
+            
+            const auto& color = nesPalette[colorIndex];
+            const auto emphasizedColor = applyColorEmphasis(color);
 
-                frameBuffer.setPixel(x, y, emphasizedColor[0], emphasizedColor[1], emphasizedColor[2]);
-            }
+            frameBuffer.setPixel(x, y, emphasizedColor[0], emphasizedColor[1], emphasizedColor[2]);
         }
 
         uint16_t cyclesPerScanline = 341;
@@ -669,6 +669,7 @@ namespace NES
                 value = readPPUSTATUS();
 
                 value = (value & 0xE0) | (ioLatch & 0x1F);
+                refreshDecay = true;
                 break;
 
             // OAMDATA
@@ -685,7 +686,12 @@ namespace NES
 
                 if(currentVramAddr >= 0x3F00)
                 {
-                    value = (value & 0x3F) | (ioLatch & 0xC0);
+                    uint8_t paletteData = value & 0x3F;
+                    if(PPUMASK & 0x01)
+                    {
+                        paletteData &= 0x30;
+                    }
+                    value = paletteData | (ioLatch & 0xC0);
                 }
                 refreshDecay = true;
                 break;
@@ -904,7 +910,8 @@ namespace NES
             OAM[offset],
             OAM[offset + 1],
             OAM[offset + 2],
-            OAM[offset + 3]
+            OAM[offset + 3],
+            (index == 0)
         };
     }
 
@@ -1189,7 +1196,7 @@ namespace NES
         // Detección de Sprite 0 Hit
         if (spritePixel.isSpriteZero && !spritePixel.transparent && !bgPixel.transparent && showBackground && showSprites)
         {
-            if (x < 255 && x >= 0)
+            if (x < 255 && x >= 0 && y < 240)
             {
                 PPUSTATUS |= 0x40; // Activar bit de Sprite 0 Hit
             }
