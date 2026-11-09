@@ -13,7 +13,8 @@ namespace NES
 
             explicit CIRAM(Mirroring mirroring);
 
-            bool handles(uint16_t addr) const override;
+            bool handlesRead(uint16_t addr) const override;
+            bool handlesWrite(uint16_t addr) const override;
 
             
             uint8_t read(uint16_t addr) override;

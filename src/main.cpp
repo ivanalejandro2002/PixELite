@@ -412,7 +412,7 @@ int main()
     // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/blargg_ppu_tests_2005.09.15b/vram_access.nes");
     // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/full_nes_palette.nes");
     // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/nmi_sync/demo_ntsc.nes");
-    // nes.loadROM("../NESROMS/accuracy testings/ntsc_torture.nes"); ???
+    // nes.loadROM("../NESROMS/accuracy testings/ntsc_torture.nes"); 
     // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/ppu_open_bus/ppu_open_bus.nes");
     // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/sprite_hit_tests_2005.10.05/02.alignment.nes");
 
@@ -425,7 +425,7 @@ int main()
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Mario/Super Mario Bros. (World).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Lemmings (USA).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Mega Man/Mega Man (USA).nes");
-    // nes.loadROM("../NESROMS/AccuracyCoin-main/AccuracyCoin.nes");
+    nes.loadROM("../NESROMS/AccuracyCoin-main/AccuracyCoin.nes");
 
 
     for (int i = 0; i < 8; ++i) {

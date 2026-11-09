@@ -19,7 +19,9 @@ namespace NES
             APU(Bus &bus);
             ~APU() = default;
 
-            bool handles(uint16_t addr) const override;
+            bool handlesRead(uint16_t addr) const override;
+            bool handlesWrite(uint16_t addr) const override;
+
             uint8_t read(uint16_t addr) override;
             void write(uint16_t addr, uint8_t value) override;
 
@@ -31,6 +33,17 @@ namespace NES
             bool testMode = false;
             void activateTestMode();
             void deactivateTestMode();
+
+            DMCChannel& getDMC() {return dmc;}
+            const DMCChannel& getDMC() const {return dmc;}
+
+            void clearFrameIRQ() {
+                frameIrqFlag = false;
+                if(!dmc.getIRQFlag())
+                {
+                    dmc.getBusReference().setIRQLine(true);
+                }
+            }
 
         private:
             PulseChannel pulse1{true};

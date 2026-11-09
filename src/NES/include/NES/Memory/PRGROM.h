@@ -13,7 +13,8 @@ namespace NES
                 const std::vector<uint8_t>& data
             );
 
-            bool handles(uint16_t addr) const override;
+            bool handlesRead(uint16_t addr) const override;
+            bool handlesWrite(uint16_t addr) const override;
 
             uint8_t read(uint16_t addr) override;
 

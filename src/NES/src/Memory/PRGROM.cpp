@@ -18,7 +18,12 @@ namespace NES
     }
 
 
-    bool PRGROM::handles(uint16_t addr) const
+    bool PRGROM::handlesRead(uint16_t addr) const
+    {
+        return addr >= 0x8000;
+    }
+
+    bool PRGROM::handlesWrite(uint16_t addr) const
     {
         return addr >= 0x8000;
     }

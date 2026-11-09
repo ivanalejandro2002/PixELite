@@ -9,7 +9,8 @@ namespace NES
         strobeState = 0;
     }
 
-    bool Controller::handles(uint16_t addr) const {return addr == 0x4016;}
+    bool Controller::handlesRead(uint16_t addr) const {return addr == 0x4016;}
+    bool Controller::handlesWrite(uint16_t addr) const {return addr == 0x4016;}
 
     uint8_t Controller::read(uint16_t addr)
     {

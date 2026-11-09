@@ -8,7 +8,12 @@ namespace NES
         isWritable = true;
     }
 
-    bool CIRAM::handles(uint16_t addr) const
+    bool CIRAM::handlesRead(uint16_t addr) const
+    {
+        return addr >= 0x2000 && addr <= 0x3EFF;
+    }
+
+    bool CIRAM::handlesWrite(uint16_t addr) const
     {
         return addr >= 0x2000 && addr <= 0x3EFF;
     }

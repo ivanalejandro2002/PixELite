@@ -102,6 +102,103 @@ namespace NES
         NMIActivation = 0;
     }
 
+    void Bus::triggerOAMDMA(uint8_t page) {
+        dmaActive = true;
+        dmaDummy = true;
+        dmaPage = page;
+        dmaAddr = 0x00;
+        dmaData = 0x00;
+    }
+
+    void Bus::clockDMA() {
+        if (!dmaActive) return;
+
+        if (dmaDummy) {
+            // En ciclos impares de CPU se requiere esperar a un ciclo par
+            if (totalCpuCycles % 2 == 1) {
+                dmaDummy = false;
+            }
+        } else {
+            // Ciclos de transferencia alternados
+            if (totalCpuCycles % 2 == 0) {
+                // Ciclo de LECTURA (Get)
+                uint16_t readAddr = (static_cast<uint16_t>(dmaPage) << 8) | dmaAddr;
+                dmaData = this->read(readAddr);
+            } else {
+                // Ciclo de ESCRITURA (Put) en $2004 (OAMDATA)
+                this->write(0x2004, dmaData);
+                dmaAddr++;
+
+                if (dmaAddr == 0) {
+                    // Al desbordar de 255 a 0, la transferencia de 256 bytes ha finalizado
+                    dmaActive = false;
+                    dmaDummy = true;
+                }
+            }
+        }
+    }
+
+    void Bus::clockDMCDMA()
+    {
+        if (dmcState == DMCDMAState::Idle) {
+            if (dmcHandler.isRequested && dmcHandler.isRequested()) {
+                dmcReadAddress = dmcHandler.getAddress();
+                // 1er ciclo (Halt): La CPU se detiene y repite la lectura en el bus
+                this->read(cpuLastReadAddress);
+                // El ciclo 1 ya fue Halt, así que el ciclo 2 será Dummy:
+                dmcState = DMCDMAState::Dummy;
+            }
+            return; // Consume este ciclo de CPU y termina
+        }
+
+        switch (dmcState)
+        {
+            case DMCDMAState::Dummy:
+                // 2do ciclo (Dummy): La CPU vuelve a repetir la lectura en el bus
+                this->read(cpuLastReadAddress);
+
+                // Si el ciclo actual es par, el siguiente es impar (Put) -> requiere Alignment
+                // Si el ciclo actual es impar, el siguiente es par (Get) -> va directo a Get
+                if ((totalCpuCycles & 1) == 0) {
+                    dmcState = DMCDMAState::Alignment;
+                } else {
+                    dmcState = DMCDMAState::Get;
+                }
+                break;
+
+            case DMCDMAState::Alignment:
+                // 3er ciclo opcional (Alignment): La CPU vuelve a repetir la lectura en el bus
+                this->read(cpuLastReadAddress);
+                dmcState = DMCDMAState::Get;
+                break;
+
+            case DMCDMAState::Get:
+            {
+                // 4to ciclo (Get): El DMA toma el bus y lee la muestra de la ROM
+                uint8_t sample = this->read(dmcReadAddress);
+
+                // Refleja la muestra en Open Bus
+                openBus.update(sample);
+
+                // Conflicto de bus del 2A03: si termina en $15, limpia Frame IRQ
+                if ((dmcReadAddress & 0x1F) == 0x15 && dmcHandler.onFrameConflict) {
+                    dmcHandler.onFrameConflict();
+                }
+
+                if (dmcHandler.deliverSample) {
+                    dmcHandler.deliverSample(sample);
+                }
+
+                dmcState = DMCDMAState::Idle;
+                break;
+            }
+
+            default:
+                dmcState = DMCDMAState::Idle;
+                break;
+        }
+    }
+
     bool Bus::isDMARunning() {return DMAInProgress;}
     
     void Bus::countDownDMA()
@@ -161,13 +258,17 @@ namespace NES
 
     uint8_t Bus::read(uint16_t addr)
     {
+        if(dmcState != DMCDMAState::Get)
+        {
+            cpuLastReadAddress = addr;
+        }
         addr = normalizeAddress(addr);
 
         bool hubo = 0;
 
         for(Device *device: devices)
         {
-            if(device -> handles(addr))
+            if(device -> handlesRead(addr))
             {
                 hubo = 1;
                 uint8_t value = device -> read(addr);
@@ -194,7 +295,7 @@ namespace NES
 
         for(Device *device: devices)
         {
-            if(device -> handles(addr))
+            if(device -> handlesWrite(addr))
             {
                 device -> write(addr, value);
                 return;

@@ -18,6 +18,13 @@ namespace NES
         cpu.connectBus(&mainBus);
         ppuRegisters.connectMainBus(&mainBus);
 
+        mainBus.setDMCHandler({
+            [this]() { return apu.getDMC().isDMARequested(); },
+            [this]() { return apu.getDMC().getDMAAddress(); },
+            [this](uint8_t sample) { apu.getDMC().deliverDMASample(sample); },
+            [this]() { apu.clearFrameIRQ(); }
+        });
+
         mainBus.addDevice(&ram);
         mainBus.addDevice(&ppuRegisters);
         mainBus.addDevice(&apu);
@@ -55,8 +62,20 @@ namespace NES
         {
             apu.clock();
 
-            if(!mainBus.isDMARunning()) cpu.clock();
-            else mainBus.countDownDMA();
+            if(mainBus.isDMCRunning() || apu.getDMC().isDMARequested())
+            {
+                mainBus.clockDMCDMA();
+            }
+            else if(mainBus.isDMAActive())
+            {
+                mainBus.clockDMA();
+            }
+            else
+            {
+                cpu.clock();
+            }
+
+            mainBus.totalCpuCycles++;
         }
 
         masterClock++;

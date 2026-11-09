@@ -24,6 +24,11 @@ namespace NES
             bool getIRQFlag() const;
             void clearIRQFlag();
 
+            bool isDMARequested() const {return dmaRequested;}
+            uint16_t getDMAAddress() const {return currentAddress;}
+            void deliverDMASample(uint8_t data);
+            void cancelDMARequest() {dmaRequested = false;}
+
             uint16_t getBytesRemaining() const;
             Bus& getBusReference();
 
@@ -52,6 +57,9 @@ namespace NES
             uint16_t timerCounter;
 
             bool irqFlag;
+
+            bool dmaRequested = false;
+            int loadDmaDelay = 0;
             
             void startSample();
 

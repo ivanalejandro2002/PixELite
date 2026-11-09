@@ -12,7 +12,12 @@ namespace NES {
             isWritable = true; // Permite CHR-RAM si el cartucho lo usa
         }
 
-        bool handles(uint16_t addr) const override {
+        bool handlesRead(uint16_t addr) const override {
+            // El espacio de patrones de la PPU va de 0x0000 a 0x1FFF
+            return addr >= 0x0000 && addr <= 0x1FFF;
+        }
+
+        bool handlesWrite(uint16_t addr) const override {
             // El espacio de patrones de la PPU va de 0x0000 a 0x1FFF
             return addr >= 0x0000 && addr <= 0x1FFF;
         }

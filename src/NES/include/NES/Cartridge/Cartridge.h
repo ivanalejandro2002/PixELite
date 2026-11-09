@@ -41,7 +41,9 @@ namespace NES{
         public:
             Cartridge();
 
-            bool handles(uint16_t addr) const override;
+            bool handlesRead(uint16_t addr) const override;
+            bool handlesWrite(uint16_t addr) const override;
+            
             uint8_t read(uint16_t addr) override;
             void write(uint16_t addr, uint8_t data) override;
             uint8_t ppuRead(uint16_t addr);

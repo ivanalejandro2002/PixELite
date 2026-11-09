@@ -15,7 +15,12 @@ namespace NES
         };
     }
 
-    bool PaletteRAM::handles(uint16_t addr) const
+    bool PaletteRAM::handlesRead(uint16_t addr) const
+    {
+        return addr >= 0x3F00 && addr <= 0x3FFF;
+    }
+
+    bool PaletteRAM::handlesWrite(uint16_t addr) const
     {
         return addr >= 0x3F00 && addr <= 0x3FFF;
     }

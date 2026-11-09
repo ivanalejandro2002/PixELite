@@ -12,7 +12,12 @@ namespace NES
         frameStep = 0;
     }
 
-    bool APU::handles(uint16_t addr) const
+    bool APU::handlesRead(uint16_t addr) const
+    {
+        return addr == 0x4015;
+    }
+
+    bool APU::handlesWrite(uint16_t addr) const
     {
         return (addr >= 0x4000 && addr <= 0x4013) ||
                 (addr == 0x4015) || 

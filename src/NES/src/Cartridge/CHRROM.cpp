@@ -8,7 +8,12 @@ namespace NES
         isWritable = false;
     }
 
-    bool CHRROM::handles(uint16_t addr) const
+    bool CHRROM::handlesRead(uint16_t addr) const
+    {
+        return addr <= 0x1FFF;
+    }
+
+    bool CHRROM::handlesWrite(uint16_t addr) const
     {
         return addr <= 0x1FFF;
     }

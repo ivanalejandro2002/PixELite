@@ -2,7 +2,12 @@
 
 namespace NES
 {
-    bool RAM::handles(uint16_t addr)const
+    bool RAM::handlesRead(uint16_t addr)const
+    {
+        return addr <= 0x1FFF;
+    }
+
+    bool RAM::handlesWrite(uint16_t addr)const
     {
         return addr <= 0x1FFF;
     }

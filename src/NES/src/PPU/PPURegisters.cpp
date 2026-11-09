@@ -9,7 +9,12 @@ namespace NES
         isWritable = true;
     }
 
-    bool PPURegisters::handles(uint16_t addr) const
+    bool PPURegisters::handlesRead(uint16_t addr) const
+    {
+        return (addr >= 0x2000 && addr <= 0x3FFF) || addr == 0x4014;
+    }
+
+    bool PPURegisters::handlesWrite(uint16_t addr) const
     {
         return (addr >= 0x2000 && addr <= 0x3FFF) || addr == 0x4014;
     }
@@ -27,8 +32,7 @@ namespace NES
     {
         if(addr == 0x4014)
         {
-            ppu.oamDma(value);
-            ppu.getMainBus()->startDMA(513);
+            ppu.getMainBus()->triggerOAMDMA(value);
             return;
         }
         uint16_t normalizedAddr = 0x2000 + (addr & 0x0007);
