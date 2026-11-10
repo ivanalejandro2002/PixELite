@@ -672,7 +672,7 @@ namespace NES
             // Si el renderizado está apagado, la pantalla muestra el color de fondo universal ($3F00)
             int x = cycle - 1;
             int y = scanline;
-            uint16_t paletteAddr = 0x3F00 | (v & 0x001F);
+            uint16_t paletteAddr = ((v & 0x3F00) == 0x3F00) ? (0x3F00 | (v & 0x001F)) : 0x3F00;
             uint8_t colorIndex = readVRAM(paletteAddr) & 0x3F;
 
             if(PPUMASK & 0x01) colorIndex &= 0x30; // Escala de grises si está activa

@@ -88,8 +88,8 @@ namespace NES
             // Ruido
             uint8_t offset = addr & 0x03;
             if(offset == 0) noise.writeControl(value);
-            else if(offset == 1) noise.writePeriod(value);
-            else if(offset == 2) noise.writeLength(value);
+            else if(offset == 2) noise.writePeriod(value);
+            else if(offset == 3) noise.writeLength(value);
             return;
         }
         if(addr >= 0x4010 && addr <= 0x4013)
@@ -139,11 +139,14 @@ namespace NES
                 fiveStepMode = (pendingFrameCounterValue & 0x80) != 0;
                 irqInhibit = (pendingFrameCounterValue & 0x40) != 0;
 
-                frameIrqFlag = false;
-
-                if(!dmc.getIRQFlag())
+                if(irqInhibit)
                 {
-                    dmc.getBusReference().setIRQLine(true);
+                    frameIrqFlag = false;
+
+                    if(!dmc.getIRQFlag())
+                    {
+                        dmc.getBusReference().setIRQLine(true);
+                    }
                 }
 
                 // Reset the internal step timers cleanly
