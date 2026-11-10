@@ -108,16 +108,25 @@ namespace NES
         dmaPage = page;
         dmaAddr = 0x00;
         dmaData = 0x00;
+        oamNeedRealign = false;
     }
 
     void Bus::clockDMA() {
         if (!dmaActive) return;
 
+        uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
+
         if (dmaDummy) {
-            // En ciclos impares de CPU se requiere esperar a un ciclo par
+            // Ciclo Halt / Dummy inicial de OAM DMA: la CPU repite la lectura en el bus
+            this->read(targetAddr);
             if (totalCpuCycles % 2 == 1) {
                 dmaDummy = false;
             }
+        } else if (oamNeedRealign) {
+            // Ciclo PUT inmediatamente posterior a que Get de DMC DMA pausó a OAM DMA:
+            // OAM DMA no puede hacer Get en ciclo PUT, así que se realinea leyendo del bus
+            this->read(targetAddr);
+            oamNeedRealign = false;
         } else {
             // Ciclos de transferencia alternados
             if (totalCpuCycles % 2 == 0) {
@@ -130,7 +139,6 @@ namespace NES
                 dmaAddr++;
 
                 if (dmaAddr == 0) {
-                    // Al desbordar de 255 a 0, la transferencia de 256 bytes ha finalizado
                     dmaActive = false;
                     dmaDummy = true;
                 }
@@ -143,25 +151,40 @@ namespace NES
         if (dmcState == DMCDMAState::Idle) {
             if (dmcHandler.isRequested && dmcHandler.isRequested()) {
                 dmcReadAddress = dmcHandler.getAddress();
-                // 1er ciclo (Halt): La CPU se detiene y repite la lectura en el bus
-                uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
-                this->read(targetAddr);
-                // El ciclo 1 ya fue Halt, así que el ciclo 2 será Dummy:
+                // 1er ciclo (Halt):
+                if (dmaActive) {
+                    clockDMA();
+                } else {
+                    uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
+                    this->read(targetAddr);
+                }
                 dmcState = DMCDMAState::Dummy;
+            } else if (dmcHandler.isAbortedRequested && dmcHandler.isAbortedRequested()) {
+                dmcHandler.clearAbortedRequest();
+                // Aborted DMA de 1 solo ciclo:
+                if (dmaActive) {
+                    clockDMA();
+                } else {
+                    uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
+                    this->read(targetAddr);
+                }
+                dmcState = DMCDMAState::Idle;
             }
-            return; // Consume este ciclo de CPU y termina
+            return;
         }
 
         switch (dmcState)
         {
             case DMCDMAState::Dummy:
             {
-                // 2do ciclo (Dummy): La CPU vuelve a repetir la lectura en el bus
-                uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
-                this->read(targetAddr);
+                // 2do ciclo (Dummy):
+                if (dmaActive) {
+                    clockDMA();
+                } else {
+                    uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
+                    this->read(targetAddr);
+                }
 
-                // Si el ciclo actual es par, el siguiente es impar (Put) -> requiere Alignment
-                // Si el ciclo actual es impar, el siguiente es par (Get) -> va directo a Get
                 if ((totalCpuCycles & 1) == 0) {
                     dmcState = DMCDMAState::Alignment;
                 } else {
@@ -172,42 +195,55 @@ namespace NES
 
             case DMCDMAState::Alignment:
             {
-                // 3er ciclo opcional (Alignment): La CPU vuelve a repetir la lectura en el bus
-                uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
-                this->read(targetAddr);
+                // 3er ciclo opcional (Alignment):
+                if (dmaActive) {
+                    clockDMA();
+                } else {
+                    uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
+                    this->read(targetAddr);
+                }
                 dmcState = DMCDMAState::Get;
                 break;
             }
 
             case DMCDMAState::Get:
             {
+                // Si OAM DMA estaba transfiriendo bytes activamente, pierde este ciclo GET
+                // y se realinea en el siguiente PUT:
+                if (dmaActive && !dmaDummy) {
+                    oamNeedRealign = true;
+                } else if (dmaActive && dmaDummy) {
+                    if (totalCpuCycles % 2 == 1) {
+                        dmaDummy = false;
+                    }
+                }
+
                 uint16_t currentCpuAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
 
-                // Dirección combinada del die del 2A03 entre el bus de CPU y DMA
+                // Decodificación de direcciones del 2A03:
+                // bits 15-5 de la CPU + bits 4-0 de la dirección del DMA
                 uint16_t combinedAddr = (currentCpuAddr & 0xFFE0) | (dmcReadAddress & 0x001F);
 
                 uint8_t sample = 0;
 
-                // Conflicto de bus con $4015: el 2A03 lee $4015 y sustituye la muestra del DMA
-                if (combinedAddr == 0x4015 || (dmcReadAddress & 0x1F) == 0x15)
-                {
-                    // Leer $4015 directamente: esto limpia el Frame IRQ y libera la línea IRQ en APU::read()
-                    sample = this->read(0x4015);
-                }
-                // Conflicto de bus con $4016 (puerto de mandos)
-                else if (combinedAddr == 0x4016 || (dmcReadAddress & 0x1F) == 0x16)
-                {
+                if (combinedAddr == 0x4015) {
+                    // Conflicto con $4015:
+                    // El cartucho coloca romByte en el bus externo (actualiza openBus)
+                    // y el 2A03 lee $4015 internamente (limpia Frame IRQ):
                     uint8_t romByte = this->read(dmcReadAddress);
-                    uint8_t joyByte = this->read(0x4016);
-                    sample = romByte & joyByte; // Colisión en el bus de datos
-                }
-                else
-                {
-                    // Lectura normal de la muestra desde la ROM
+                    uint8_t statusByte = this->read(0x4015);
+                    sample = (statusByte & 0xDF) | (romByte & 0x20);
+                    openBus.update(romByte);
+                } else if (combinedAddr == 0x4016 || combinedAddr == 0x4017) {
+                    // Conflicto con puertos de control:
+                    uint8_t romByte = this->read(dmcReadAddress);
+                    uint8_t joyByte = this->read(combinedAddr);
+                    sample = romByte & joyByte;
+                    openBus.update(sample);
+                } else {
                     sample = this->read(dmcReadAddress);
+                    openBus.update(sample);
                 }
-
-                openBus.update(sample);
 
                 if (dmcHandler.deliverSample) {
                     dmcHandler.deliverSample(sample);

@@ -23,7 +23,9 @@ namespace NES
             [this]() { return apu.getDMC().getDMAAddress(); },
             [this](uint8_t sample) { apu.getDMC().deliverDMASample(sample); },
             [this]() { apu.clearFrameIRQ(); },
-            [this]() {return cpu.getCurrentBusAddress();}
+            [this]() { return cpu.getCurrentBusAddress(); },
+            [this]() { return apu.getDMC().isAbortedDMARequested(); },
+            [this]() { apu.getDMC().clearAbortedDMARequest(); }
         });
 
         mainBus.addDevice(&ram);
@@ -65,8 +67,21 @@ namespace NES
 
             bool cpuWriting = cpu.isWriteCycle();
 
-            // El DMA solo puede pausar a la CPU si NO está en ciclo de escritura:
-            if((mainBus.isDMCRunning() || apu.getDMC().isDMARequested()) && !cpuWriting)
+            // Si un DMA abortado de 1 ciclo ocurre durante un ciclo de escritura de la CPU,
+            // no se retrasa: se cancela por completo (0 ciclos):
+            if(apu.getDMC().isAbortedDMARequested() && cpuWriting && !mainBus.isDMAActive())
+            {
+                apu.getDMC().clearAbortedDMARequest();
+            }
+
+            bool dmcPending = mainBus.isDMCRunning() ||
+                              apu.getDMC().isDMARequested() ||
+                              apu.getDMC().isAbortedDMARequested();
+
+            // Si OAM DMA ya tiene pausada a la CPU, cpuWriting no bloquea a DMC DMA:
+            bool canPauseCPU = !cpuWriting || mainBus.isDMAActive();
+
+            if(dmcPending && canPauseCPU)
             {
                 mainBus.clockDMCDMA();
             }
@@ -76,7 +91,7 @@ namespace NES
             }
             else
             {
-                cpu.clock(); // La CPU ejecuta su ciclo de escritura normalmente
+                cpu.clock();
             }
 
             mainBus.totalCpuCycles++;

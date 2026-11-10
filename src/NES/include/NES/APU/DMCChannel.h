@@ -20,6 +20,9 @@ namespace NES
             void setEnabled(bool enable);
             bool isEnabled() const;
 
+            bool isAbortedDMARequested() const { return abortedDmaRequested; }
+            void clearAbortedDMARequest() { abortedDmaRequested = false; }
+
             uint8_t output() const;
             bool getIRQFlag() const;
             void clearIRQFlag();
@@ -59,7 +62,9 @@ namespace NES
             bool irqFlag;
 
             bool dmaRequested = false;
-            int loadDmaDelay = 0;
+            uint8_t loadDmaDelay = 0;
+            uint8_t abortedDmaDelay = 0;
+            bool abortedDmaRequested = false;
             
             void startSample();
 

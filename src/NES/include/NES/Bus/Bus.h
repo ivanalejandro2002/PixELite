@@ -71,6 +71,8 @@ namespace NES
                 std::function<void(uint8_t)> deliverSample;
                 std::function<void()> onFrameConflict; // Para limpiar el Frame IRQ si lee $xx15
                 std::function<uint16_t()> getCpuAddress;
+                std::function<bool()> isAbortedRequested;
+                std::function<void()> clearAbortedRequest;
             };
 
             void setDMCHandler(DMCHandler handler) { dmcHandler = handler; }
@@ -111,6 +113,7 @@ namespace NES
 
             bool dmaActive = false;
             bool dmaDummy = true;
+            bool oamNeedRealign = false;
             uint8_t dmaPage = 0x00;
             uint8_t dmaAddr = 0x00;
             uint8_t dmaData = 0x00;
