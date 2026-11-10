@@ -1095,24 +1095,6 @@ namespace NES::CPU
 
         bus->write(stackAddress, pushData);
         decrementS();
-
-        if (currentInstruction.has_value())
-        {
-            auto op = currentInstruction->getOperation();
-            if (op == InstructionOperation::BRK || op == InstructionOperation::IRQ)
-            {
-                if (pendingNMI || bus->getNMIActivation())
-                {
-                    nmiHijacked = true;
-                    pendingNMI = false;
-                    bus->finishNMI();
-                }
-                else
-                {
-                    nmiHijacked = false;
-                }
-            }
-        }
     }
 
     void MOS6502::pushAccumulator()
@@ -1140,11 +1122,22 @@ namespace NES::CPU
                 0x0100 | 
                 static_cast<uint16_t>(S)
             );
-        
-        bus->write(stackAddress,pushReg.getByte());
+
+        bus->write(stackAddress, pushReg.getByte());
         decrementS();
 
         status.setFlag(StatusRegister::I, 1);
+
+        if (pendingNMI || bus->getNMIActivation())
+        {
+            nmiHijacked = true;
+            pendingNMI = false;
+            bus->finishNMI();
+        }
+        else
+        {
+            nmiHijacked = false;
+        }
     }
 
     void MOS6502::pushStatusNMI()
@@ -1180,11 +1173,22 @@ namespace NES::CPU
                 0x0100 | 
                 static_cast<uint16_t>(S)
             );
-        
-        bus->write(stackAddress,pushReg.getByte());
+
+        bus->write(stackAddress, pushReg.getByte());
         decrementS();
 
         status.setFlag(StatusRegister::I, 1);
+
+        if (pendingNMI || bus->getNMIActivation())
+        {
+            nmiHijacked = true;
+            pendingNMI = false;
+            bus->finishNMI();
+        }
+        else
+        {
+            nmiHijacked = false;
+        }
     }
 
     void MOS6502::dummyPush()
@@ -1321,7 +1325,6 @@ namespace NES::CPU
         if (nmiHijacked)
         {
             address = 0xFFFA;
-            nmiHijacked = false;
         }
         else
         {
