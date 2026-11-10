@@ -416,6 +416,8 @@ int main()
     // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/ppu_open_bus/ppu_open_bus.nes");
     // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/sprite_hit_tests_2005.10.05/02.alignment.nes");
 
+    // APU
+    // nes.loadROM("../NESROMS/accuracy testings/nes-test-roms-master/apu_test/apu_test.nes");
 
 
     // nes.loadROM("../NESROMS/oficial/BestNESGames/DuckTales (USA).nes");
