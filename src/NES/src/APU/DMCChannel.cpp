@@ -21,11 +21,15 @@ namespace NES
         sampleBuffer = 0;
         bufferEmpty = true;
         shiftRegister = 0;
-        bitsRemaining = 8; // <-- CORREGIDO: Inicia en 8
+        bitsRemaining = 8;
         silenceFlag = true;
         timerReload = NTSC_RATE_TABLE[0] - 1;
         timerCounter = timerReload;
         irqFlag = false;
+        dmaRequested = false;
+        loadDmaDelay = 0;
+        abortedDmaDelay = 0;
+        abortedDmaRequested = false;
     }
 
     void DMCChannel::setEnabled(bool enable)
@@ -33,14 +37,39 @@ namespace NES
         enabled = enable;
         if(!enabled)
         {
+            // Explicit DMA Abort: si una muestra estaba en curso y el canal se apaga
+            // justo en el ciclo de APU previo a un Reload DMA:
+            if(bytesRemaining > 0 && bitsRemaining == 1 && (timerCounter == 2 || timerCounter == 1))
+            {
+                abortedDmaDelay = timerCounter;
+            }
+
+            // Si había un Load DMA agendado por un setEnabled previo:
+            if(loadDmaDelay > 0)
+            {
+                if(loadDmaDelay <= 2)
+                {
+                    abortedDmaDelay = loadDmaDelay;
+                }
+                loadDmaDelay = 0;
+            }
+
             bytesRemaining = 0;
-            dmaRequested = false; // Cancela cualquier DMA pendiente (Explicit Abort)
+            dmaRequested = false;
         }
         else
         {
             if(bytesRemaining == 0)
             {
                 startSample();
+
+                if(bufferEmpty && bytesRemaining > 0)
+                {
+                    // Load DMA se agenda para el ciclo GET del 2do ciclo de APU tras escribir $4015:
+                    // - Si ocurrió en ciclo par (GET): 4 ciclos de CPU
+                    // - Si ocurrió en ciclo impar (PUT): 3 ciclos de CPU
+                    loadDmaDelay = ((busReference.totalCpuCycles & 1) == 0) ? 4 : 3;
+                }
             }
         }
         irqFlag = false;
@@ -87,6 +116,24 @@ namespace NES
 
     void DMCChannel::clockTimer()
     {
+        if(loadDmaDelay > 0)
+        {
+            loadDmaDelay--;
+            if(loadDmaDelay == 0 && bufferEmpty && bytesRemaining > 0)
+            {
+                dmaRequested = true;
+            }
+        }
+
+        if(abortedDmaDelay > 0)
+        {
+            abortedDmaDelay--;
+            if(abortedDmaDelay == 0)
+            {
+                abortedDmaRequested = true;
+            }
+        }
+
         if(timerCounter == 0)
         {
             timerReload = NTSC_RATE_TABLE[rateIndex] - 1;
@@ -119,18 +166,18 @@ namespace NES
                     silenceFlag = false;
                     shiftRegister = sampleBuffer;
                     bufferEmpty = true;
+
+                    // Reload DMA: solicita DMA inmediatamente cuando el shift register toma la muestra
+                    if(bytesRemaining > 0)
+                    {
+                        dmaRequested = true;
+                    }
                 }
             }
         }
         else
         {
             timerCounter--;
-        }
-
-        // Si el buffer de muestras está vacío y quedan bytes, solicitar DMA
-        if(bufferEmpty && bytesRemaining > 0 && !dmaRequested)
-        {
-            dmaRequested = true;
         }
     }
 
@@ -153,10 +200,20 @@ namespace NES
             {
                 startSample();
             }
-            else if(irqEnabled)
+            else
             {
-                irqFlag = true;
-                busReference.setIRQLine(false);
+                if(irqEnabled)
+                {
+                    irqFlag = true;
+                    busReference.setIRQLine(false);
+                }
+
+                // Implicit DMA Abort: una muestra de 1 byte sin loop terminó su transferencia
+                // justo en el ciclo de APU previo a donde el Reload DMA se agendaría:
+                if(bitsRemaining == 1 && (timerCounter == 2 || timerCounter == 1))
+                {
+                    abortedDmaDelay = timerCounter;
+                }
             }
         }
     }
