@@ -427,7 +427,7 @@ int main()
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Mario/Super Mario Bros. (World).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Lemmings (USA).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Mega Man/Mega Man (USA).nes");
-    nes.loadROM("../NESROMS/AccuracyCoin-main/AccuracyCoin.nes");
+    nes.loadROM("../NESROMS/AC/AccuracyCoin-main/AccuracyCoin.nes");
 
 
     for (int i = 0; i < 8; ++i) {
