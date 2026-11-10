@@ -486,7 +486,7 @@ namespace NES
                 PPUSTATUS |= 0x80;
                 if (PPUCTRL & 0x80)
                 {
-                    nmiDelay = 2;
+                    nmiDelay = 2; // Dispara exactamente en dot 2
                 }
             }
             suppressVBlankFlag = false;
@@ -835,7 +835,7 @@ namespace NES
         {
             if (!(oldCtrl & 0x80))
             {
-                nmiDelay = 2; // Retardo hacia la CPU
+                nmiDelay = 2; // Retardo coherente de 1 dot
             }
         }
         else
@@ -865,7 +865,6 @@ namespace NES
         {
             if (cycle == 0)
             {
-                // 1 dot antes: suprime bandera y NMI
                 suppressVBlankFlag = true;
                 nmiDelay = 0;
                 mainBus->setNMILine(true);
@@ -873,21 +872,19 @@ namespace NES
             }
             else if (cycle == 1 || cycle == 2)
             {
-                // Dots 1 y 2: la bandera se leyó encendida, pero la NMI se suprime
+                // En ciclos 1 y 2 la bandera se lee como 1 pero la NMI se suprime
                 nmiDelay = 0;
                 mainBus->setNMILine(true);
                 mainBus->finishNMI();
             }
         }
-
-        // Si se lee en cycle >= 3 o en cualquier otro momento durante VBlank:
-        // Se libera la línea física de la PPU, pero NO se llama a finishNMI()
-        if (value & 0x80)
+        else if (value & 0x80)
         {
+            // Fuera de la ventana de supresión, solo se libera la línea física
+            // sin borrar el flanco ya capturado por la CPU
             mainBus->setNMILine(true);
         }
 
-        nmiDelay = 0; // Cancela retardo pendiente si aún no se había completado
         PPUSTATUS &= 0x7F;
         writeToggle = false;
         return value;
