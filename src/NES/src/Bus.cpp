@@ -288,15 +288,32 @@ namespace NES
         }
         addr = normalizeAddress(addr);
 
+        // $4014 (OAMDMA) es solo de escritura; leerlo debe devolver Open Bus
+        // (evita que PPURegisters lo mapee por error a $2004 OAMDATA)
+        if(addr == 0x4014)
+        {
+            return openBus.getValue();
+        }
+
         for(Device *device: devices)
         {
             if(device -> handlesRead(addr))
             {
                 uint8_t value = device -> read(addr);
 
+                // Los bits 5, 6 y 7 de $4016 y $4017 provienen del open bus
                 if(addr == 0x4016 || addr == 0x4017)
                 {
-                    value = (openBus.getValue() & 0xE0) | (value & 0x1F);
+                    value = (value & 0x1F) | (openBus.getValue() & 0xE0);
+                }
+
+                // En $4015, el bit 5 es Open Bus y la lectura es interna al 2A03
+                // (NO actualiza el estado de openBus)
+                if(addr == 0x4015)
+                {
+                    value = (value & 0xDF) | (openBus.getValue() & 0x20);
+                    value = applyReadMasks(addr, value);
+                    return value;
                 }
 
                 value = applyReadMasks(addr, value);

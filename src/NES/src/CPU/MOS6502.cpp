@@ -6,6 +6,7 @@
 
 namespace NES::CPU
 {
+    static bool nmiHijacked = false;
 
     MOS6502::MOS6502()
     {
@@ -61,8 +62,12 @@ namespace NES::CPU
             case MicroOperation::FetchAddressHighAddX:
             case MicroOperation::FetchAddressHighAddY:
             case MicroOperation::FetchBranch:
+            case MicroOperation::EvaluateBranch:
             case MicroOperation::FetchAddressHighToPC:
                 return PC;
+
+            case MicroOperation::DummyBranchPageCrossRead:
+                return (PC & 0xFF00) | (address & 0x00FF);
 
             // Ciclos donde la CPU accede a la dirección efectiva (ej: $2002, $2007, $4015, $4016):
             case MicroOperation::ReadOperand:
@@ -98,9 +103,9 @@ namespace NES::CPU
 
             // Vectores de interrupción:
             case MicroOperation::FetchInterruptVectorLow:
-                return 0xFFFE;
+                return nmiHijacked ? 0xFFFA : 0xFFFE;
             case MicroOperation::FetchInterruptVectorHigh:
-                return 0xFFFF;
+                return nmiHijacked ? 0xFFFB : 0xFFFF;
             case MicroOperation::FetchNMIVectorLow:
                 return 0xFFFA;
             case MicroOperation::FetchNMIVectorHigh:
@@ -132,6 +137,7 @@ namespace NES::CPU
             if(pendingNMI)
             {
                 pendingNMI = false;
+                pendingIRQ = false;
                 currentInstruction =
                     instructionFactory.create({
                                                 InstructionOperation::NMI,
@@ -139,8 +145,10 @@ namespace NES::CPU
                                                 AccessType::None,
                                                 7});
                 return;
-            }else if(pendingIRQ)
+            }
+            else if(pendingIRQ)
             {
+                pendingIRQ = false;
                 currentInstruction =
                     instructionFactory.create({
                                                 InstructionOperation::IRQ,
@@ -153,24 +161,19 @@ namespace NES::CPU
 
             fetchOpcode();
             currentInstruction = instructionFactory.create(instructionTable.get(opcode));
-
-            // std::cout << "<" << std::hex << std::uppercase << std::setfill('0') << std::setw(4) << PC << ">";
-            // std::cout << InstructionOperationMapper::ToString(currentInstruction->getOperation()) << "("
-            //             << AddressingModeMapper::ToString(currentInstruction->getAddressingMode()) << "), ";
-
-            // currentInstruction->printInstruction();
             return;
         }
 
         if(currentInstruction->getRemainingOperations() == 1 && 
-            currentInstruction->getBack() != MicroOperation::ReadOperandVariable)
+            currentInstruction->getBack() != MicroOperation::ReadOperandVariable &&
+            currentInstruction->getCurrentOperationType() != MicroOperation::EvaluateBranch)
         {
             pollInterruptions();
         }
 
         currentInstruction->tick(*this);
 
-        if(currentInstruction->pollable())pollInterruptions();
+        if(currentInstruction->pollable()) pollInterruptions();
     }
 
     void MOS6502::reset()
@@ -180,6 +183,7 @@ namespace NES::CPU
         pendingIUpdates = 0;
         iUpdate = 0;
         pendingIRQ = pendingNMI = 0;
+        nmiHijacked = false;
 
         currentInstruction = instructionFactory.create({
             InstructionOperation::Reset,
@@ -218,13 +222,27 @@ namespace NES::CPU
 
     void MOS6502::pollInterruptions()
     {
-        pendingIRQ = 0; // IRQ es sensible por nivel
+        if(currentInstruction.has_value())
+        {
+            auto op = currentInstruction->getOperation();
+            if(op == InstructionOperation::Reset ||
+                op == InstructionOperation::TurnOn ||
+                op == InstructionOperation::NMI ||
+                op == InstructionOperation::IRQ ||
+                op == InstructionOperation::BRK)
+            {
+                return;
+            }
+        }
 
-        if(currentInstruction.has_value() && 
-            (currentInstruction->getOperation() == InstructionOperation::Reset ||
-            currentInstruction->getOperation() == InstructionOperation::TurnOn))
-            return;
-        
+        // En el 2do poll de un branch con cruce de página (ciclo 4: DummyBranchPageCrossRead),
+        // se conserva cualquier pendingIRQ que ya se haya detectado en el 1er poll (ciclo 2).
+        if(!currentInstruction.has_value() ||
+            currentInstruction->getCurrentOperationType() != MicroOperation::DummyBranchPageCrossRead)
+        {
+            pendingIRQ = false;
+        }
+
         if(bus->getNMIActivation())
         {
             pendingNMI = true;
@@ -995,7 +1013,6 @@ namespace NES::CPU
 
     void MOS6502::evaluateBranch()
     {
-
         int16_t offset = static_cast<int8_t>(data);
 
         uint16_t target =
@@ -1006,7 +1023,7 @@ namespace NES::CPU
 
         address = target;
 
-        // Primer ciclo adicional: dummy read del PC actual.
+        // Ciclo 3 del branch: dummy read del PC actual (byte siguiente al operando)
         data = bus->read(PC);
 
         if (!pageCrossed)
@@ -1025,8 +1042,10 @@ namespace NES::CPU
 
     void MOS6502::dummyBranchPageCrossRead()
     {
+        // Ciclo 4 del branch (cruce de página): dummy read con PCH viejo y PCL nuevo
+        uint16_t dummyAddr = (PC & 0xFF00) | (address & 0x00FF);
+        data = bus->read(dummyAddr);
         PC = address;
-        data = bus->read(address);
     }
 
     void MOS6502::pushStatus()
@@ -1070,13 +1089,30 @@ namespace NES::CPU
                 0x0100 | 
                 static_cast<uint16_t>(S)
             );
-        
+
         uint8_t pushData =
             static_cast<uint8_t>(PC & 0x00FF);
-        
 
         bus->write(stackAddress, pushData);
         decrementS();
+
+        if (currentInstruction.has_value())
+        {
+            auto op = currentInstruction->getOperation();
+            if (op == InstructionOperation::BRK || op == InstructionOperation::IRQ)
+            {
+                if (pendingNMI || bus->getNMIActivation())
+                {
+                    nmiHijacked = true;
+                    pendingNMI = false;
+                    bus->finishNMI();
+                }
+                else
+                {
+                    nmiHijacked = false;
+                }
+            }
+        }
     }
 
     void MOS6502::pushAccumulator()
@@ -1282,19 +1318,27 @@ namespace NES::CPU
 
     void MOS6502::fetchInterruptVectorLow()
     {
-        address = 0xFFFE;
+        if (nmiHijacked)
+        {
+            address = 0xFFFA;
+            nmiHijacked = false;
+        }
+        else
+        {
+            address = 0xFFFE;
+        }
         addressLow = bus->read(address);
     }
 
     void MOS6502::fetchInterruptVectorHigh()
     {
-        address = 0xFFFF;
+        address = nmiHijacked ? 0xFFFB : 0xFFFF;
         addressHigh = bus->read(address);
 
-        PC = 
-            static_cast<uint16_t>(addressLow) |
+        PC = static_cast<uint16_t>(addressLow) |
             (static_cast<uint16_t>(addressHigh) << 8);
 
+        nmiHijacked = false; // Reset de la bandera tras completar el salto
     }
 
     void MOS6502::fetchNMIVectorLow()
