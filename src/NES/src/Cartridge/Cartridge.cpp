@@ -11,13 +11,13 @@ namespace NES
     bool Cartridge::handlesRead(uint16_t addr) const {
         // El cartucho responde al rango de PRG del CPU (y opcionalmente RAM de batería $6000-$7FFF)
         return (addr >= 0x8000 && addr <= 0xFFFF) ||
-                (addr >= 0x6000 && addr <= 0x7FFF);
+               (!prgRam.empty() && addr >= 0x6000 && addr <= 0x7FFF);
     }
 
     bool Cartridge::handlesWrite(uint16_t addr) const {
         // El cartucho responde al rango de PRG del CPU (y opcionalmente RAM de batería $6000-$7FFF)
         return (addr >= 0x8000 && addr <= 0xFFFF) ||
-                (addr >= 0x6000 && addr <= 0x7FFF);
+               (!prgRam.empty() && addr >= 0x6000 && addr <= 0x7FFF);
     }
 
     uint8_t Cartridge::read(uint16_t addr) {

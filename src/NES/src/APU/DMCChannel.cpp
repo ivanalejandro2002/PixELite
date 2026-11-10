@@ -53,10 +53,10 @@ namespace NES
 
     void DMCChannel::writeFlagsRate(uint8_t value)
     {
-        irqEnabled = (value & 0x40) != 0;
-        loopFlag = (value & 0x20) != 0;
-        rateIndex = value & 0x0F;
-        timerReload = NTSC_RATE_TABLE[rateIndex] - 1; // <-- CORREGIDO: Periodo exacto N - 1
+        irqEnabled = (value & 0x80) != 0; // Bit 7: IRQ Enable
+        loopFlag   = (value & 0x40) != 0; // Bit 6: Loop
+        rateIndex  = value & 0x0F;
+        timerReload = NTSC_RATE_TABLE[rateIndex] - 1;
 
         if(!irqEnabled)
         {
