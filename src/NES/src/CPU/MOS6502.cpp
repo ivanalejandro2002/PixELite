@@ -131,6 +131,7 @@ namespace NES::CPU
         {
             if(pendingNMI)
             {
+                pendingNMI = false;
                 currentInstruction =
                     instructionFactory.create({
                                                 InstructionOperation::NMI,
@@ -153,11 +154,6 @@ namespace NES::CPU
             fetchOpcode();
             currentInstruction = instructionFactory.create(instructionTable.get(opcode));
 
-            if(currentInstruction->getRemainingOperations() == 1)
-            {
-                pollInterruptions();
-            }
-
             // std::cout << "<" << std::hex << std::uppercase << std::setfill('0') << std::setw(4) << PC << ">";
             // std::cout << InstructionOperationMapper::ToString(currentInstruction->getOperation()) << "("
             //             << AddressingModeMapper::ToString(currentInstruction->getAddressingMode()) << "), ";
@@ -166,12 +162,13 @@ namespace NES::CPU
             return;
         }
 
-        currentInstruction->tick(*this);
         if(currentInstruction->getRemainingOperations() == 1 && 
             currentInstruction->getBack() != MicroOperation::ReadOperandVariable)
         {
             pollInterruptions();
         }
+
+        currentInstruction->tick(*this);
 
         if(currentInstruction->pollable())pollInterruptions();
     }
@@ -221,7 +218,7 @@ namespace NES::CPU
 
     void MOS6502::pollInterruptions()
     {
-        pendingNMI = pendingIRQ = 0;
+        pendingIRQ = 0; // IRQ es sensible por nivel
 
         if(currentInstruction.has_value() && 
             (currentInstruction->getOperation() == InstructionOperation::Reset ||
@@ -233,8 +230,10 @@ namespace NES::CPU
             pendingNMI = true;
             bus->finishNMI();
         }
-        else if(!bus->getIRQLine() && !status.getFlag(StatusRegister::I))pendingIRQ = true;
-
+        else if(!bus->getIRQLine() && !status.getFlag(StatusRegister::I))
+        {
+            pendingIRQ = true;
+        }
     }
 
     void MOS6502::execute(MicroOperation operation)

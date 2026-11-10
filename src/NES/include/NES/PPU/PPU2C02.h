@@ -179,6 +179,9 @@ namespace NES
                 bool oddFrame = false;
                 uint8_t oamM = 0;
 
+                bool suppressVBlankFlag = false;
+                uint8_t nmiDelay = 0;
+
                 uint16_t cycle = 0;
 
                 void incrementCoarseX();

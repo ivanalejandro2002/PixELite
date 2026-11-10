@@ -455,6 +455,15 @@ namespace NES
     {
         ++cycle;
 
+        if (nmiDelay > 0)
+        {
+            nmiDelay--;
+            if (nmiDelay == 0 && (PPUSTATUS & 0x80) && (PPUCTRL & 0x80))
+            {
+                mainBus->setNMILine(false);
+            }
+        }
+
         if (openBusTimer > 0)
         {
             openBusTimer--;
@@ -470,16 +479,17 @@ namespace NES
 
         const bool renderScanLine = visibleScanLine || preRenderScanLine;
 
-        if(scanline == 241 && cycle == 1)
+        if (scanline == 241 && cycle == 1)
         {
-            //Vblank
-            PPUSTATUS |= 0x80;
-
-            if(PPUCTRL & 0x80)
+            if (!suppressVBlankFlag)
             {
-                // flanco de bajada en NMI
-                mainBus->setNMILine(false);
+                PPUSTATUS |= 0x80;
+                if (PPUCTRL & 0x80)
+                {
+                    nmiDelay = 2; // Dispara exactamente en dot 2
+                }
             }
+            suppressVBlankFlag = false;
         }
 
         if(preRenderScanLine)
@@ -820,10 +830,18 @@ namespace NES
         uint8_t oldCtrl = PPUCTRL;
         PPUCTRL = value;
 
-        if(!(oldCtrl & 0x80) && (value & 0x80) && (PPUSTATUS & 0x80))
+        const bool nmiActive = (PPUSTATUS & 0x80) && (value & 0x80);
+        if (nmiActive)
         {
-            // Disparar NMI inmediata
-            mainBus->setNMILine(false);
+            if (!(oldCtrl & 0x80))
+            {
+                nmiDelay = 2; // Retardo coherente de 1 dot
+            }
+        }
+        else
+        {
+            nmiDelay = 0;
+            mainBus->setNMILine(true);
         }
 
         t &= 0xF3FF;
@@ -843,15 +861,32 @@ namespace NES
     {
         uint8_t value = PPUSTATUS;
 
-        if(value & 0x80)
+        if (scanline == 241)
         {
-            // Liberación NMI
+            if (cycle == 0)
+            {
+                suppressVBlankFlag = true;
+                nmiDelay = 0;
+                mainBus->setNMILine(true);
+                mainBus->finishNMI();
+            }
+            else if (cycle == 1 || cycle == 2)
+            {
+                // En ciclos 1 y 2 la bandera se lee como 1 pero la NMI se suprime
+                nmiDelay = 0;
+                mainBus->setNMILine(true);
+                mainBus->finishNMI();
+            }
+        }
+        else if (value & 0x80)
+        {
+            // Fuera de la ventana de supresión, solo se libera la línea física
+            // sin borrar el flanco ya capturado por la CPU
             mainBus->setNMILine(true);
         }
 
         PPUSTATUS &= 0x7F;
         writeToggle = false;
-
         return value;
     }
 
@@ -1023,6 +1058,9 @@ namespace NES
         oamM = 0;
 
         frameComplete = 0;
+
+        suppressVBlankFlag = false;
+        nmiDelay = 0;
     }
 
     bool PPU2C02::isFrameComplete() const {return frameComplete;}
@@ -1121,11 +1159,11 @@ namespace NES
 
     void PPU2C02::updateBackgroundShifters()
     {
-        bgPatternShiftLow <<= 1;
-        bgPatternShiftHigh <<= 1;
+        bgPatternShiftLow = (bgPatternShiftLow << 1) | 0x0001;
+        bgPatternShiftHigh = (bgPatternShiftHigh << 1) | 0x0001;
 
-        bgAttributeShiftLow <<= 1;
-        bgAttributeShiftHigh <<= 1;
+        bgAttributeShiftLow = (bgAttributeShiftLow << 1) | 0x0001;
+        bgAttributeShiftHigh = (bgAttributeShiftHigh << 1) | 0x0001;
     }
 
     void PPU2C02::backgroundFetch()
