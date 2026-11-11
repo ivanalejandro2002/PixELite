@@ -14,11 +14,11 @@ namespace NES
 
     uint8_t Controller::read(uint16_t addr)
     {
-        if(strobeState) shiftRegister = buttonStates;
-
+        if (strobeState) {
+            shiftRegister = buttonStates;
+        }
         uint8_t response = shiftRegister & 0x01;
-        shiftRegister >>= 1;
-
+        shiftRegister = (shiftRegister >> 1) | 0x80;
         return response;
     }
 

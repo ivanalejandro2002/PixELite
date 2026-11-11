@@ -151,6 +151,7 @@ namespace NES
         if (dmcState == DMCDMAState::Idle) {
             if (dmcHandler.isRequested && dmcHandler.isRequested()) {
                 dmcReadAddress = dmcHandler.getAddress();
+
                 // 1er ciclo (Halt):
                 if (dmaActive) {
                     clockDMA();
@@ -158,17 +159,17 @@ namespace NES
                     uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
                     this->read(targetAddr);
                 }
-                dmcState = DMCDMAState::Dummy;
-            } else if (dmcHandler.isAbortedRequested && dmcHandler.isAbortedRequested()) {
-                dmcHandler.clearAbortedRequest();
-                // Aborted DMA de 1 solo ciclo:
-                if (dmaActive) {
-                    clockDMA();
+
+                // DMA abortado de 1 ciclo: si no quedan bytes por transferir,
+                // termina en este único ciclo Halt y vuelve a Idle:
+                if (dmcHandler.getBytesRemaining && dmcHandler.getBytesRemaining() == 0) {
+                    if (dmcHandler.cancelRequest) {
+                        dmcHandler.cancelRequest();
+                    }
+                    dmcState = DMCDMAState::Idle;
                 } else {
-                    uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
-                    this->read(targetAddr);
+                    dmcState = DMCDMAState::Dummy;
                 }
-                dmcState = DMCDMAState::Idle;
             }
             return;
         }
@@ -177,7 +178,6 @@ namespace NES
         {
             case DMCDMAState::Dummy:
             {
-                // 2do ciclo (Dummy):
                 if (dmaActive) {
                     clockDMA();
                 } else {
@@ -195,7 +195,6 @@ namespace NES
 
             case DMCDMAState::Alignment:
             {
-                // 3er ciclo opcional (Alignment):
                 if (dmaActive) {
                     clockDMA();
                 } else {
@@ -208,8 +207,6 @@ namespace NES
 
             case DMCDMAState::Get:
             {
-                // Si OAM DMA estaba transfiriendo bytes activamente, pierde este ciclo GET
-                // y se realinea en el siguiente PUT:
                 if (dmaActive && !dmaDummy) {
                     oamNeedRealign = true;
                 } else if (dmaActive && dmaDummy) {
@@ -219,23 +216,15 @@ namespace NES
                 }
 
                 uint16_t currentCpuAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
-
-                // Decodificación de direcciones del 2A03:
-                // bits 15-5 de la CPU + bits 4-0 de la dirección del DMA
                 uint16_t combinedAddr = (currentCpuAddr & 0xFFE0) | (dmcReadAddress & 0x001F);
-
                 uint8_t sample = 0;
 
                 if (combinedAddr == 0x4015) {
-                    // Conflicto con $4015:
-                    // El cartucho coloca romByte en el bus externo (actualiza openBus)
-                    // y el 2A03 lee $4015 internamente (limpia Frame IRQ):
                     uint8_t romByte = this->read(dmcReadAddress);
                     uint8_t statusByte = this->read(0x4015);
                     sample = (statusByte & 0xDF) | (romByte & 0x20);
                     openBus.update(romByte);
                 } else if (combinedAddr == 0x4016 || combinedAddr == 0x4017) {
-                    // Conflicto con puertos de control:
                     uint8_t romByte = this->read(dmcReadAddress);
                     uint8_t joyByte = this->read(combinedAddr);
                     sample = romByte & joyByte;
@@ -324,8 +313,6 @@ namespace NES
         }
         addr = normalizeAddress(addr);
 
-        // $4014 (OAMDMA) es solo de escritura; leerlo debe devolver Open Bus
-        // (evita que PPURegisters lo mapee por error a $2004 OAMDATA)
         if(addr == 0x4014)
         {
             return openBus.getValue();
@@ -335,29 +322,53 @@ namespace NES
         {
             if(device -> handlesRead(addr))
             {
-                uint8_t value = device -> read(addr);
+                uint8_t value = 0;
 
-                // Los bits 5, 6 y 7 de $4016 y $4017 provienen del open bus
-                if(addr == 0x4016 || addr == 0x4017)
+                // Filtrado de lecturas consecutivas a $4016 (hardware de NES):
+                // Dos lecturas a $4016 en ciclos contiguos no pulsan el mando una segunda vez
+                if(addr == 0x4016)
                 {
+                    if(totalCpuCycles == lastControllerReadCycle + 1)
+                    {
+                        value = lastControllerValue;
+                    }
+                    else
+                    {
+                        value = device -> read(addr);
+                        lastControllerValue = value;
+                    }
+                    lastControllerReadCycle = totalCpuCycles;
                     value = (value & 0x1F) | (openBus.getValue() & 0xE0);
                 }
-
-                // En $4015, el bit 5 es Open Bus y la lectura es interna al 2A03
-                // (NO actualiza el estado de openBus)
-                if(addr == 0x4015)
+                else if(addr == 0x4017)
                 {
+                    value = device -> read(addr);
+                    value = (value & 0x1F) | (openBus.getValue() & 0xE0);
+                }
+                else if(addr == 0x4015)
+                {
+                    value = device -> read(addr);
                     value = (value & 0xDF) | (openBus.getValue() & 0x20);
                     value = applyReadMasks(addr, value);
                     return value;
                 }
+                else
+                {
+                    value = device -> read(addr);
+                }
 
                 value = applyReadMasks(addr, value);
-
                 openBus.update(value);
-
                 return value;
             }
+        }
+
+        // Si ningún dispositivo maneja $4016 o $4017 (puerto 2 no conectado):
+        if(addr == 0x4016 || addr == 0x4017)
+        {
+            uint8_t finalVal = openBus.getValue() & 0xE0;
+            openBus.update(finalVal);
+            return finalVal;
         }
 
         return openBus.getValue();
