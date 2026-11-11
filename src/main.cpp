@@ -424,7 +424,10 @@ int main()
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Dig Dug (Japan).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Zelda/Legend of Zelda, The (USA) (Rev 1).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Metroid (USA).nes");
-    nes.loadROM("../NESROMS/oficial/BestNESGames/Mario/Super Mario Bros. (World).nes");
+    // nes.loadROM("../NESROMS/oficial/BestNESGames/Mario/Super Mario Bros. (World).nes");
+    // nes.loadROM("../NESROMS/oficial/BestNESGames/Mario/Super Mario Bros. 2 (USA) (Rev 1).nes");
+    // nes.loadROM("../NESROMS/oficial/BestNESGames/Mario/Super Mario Bros. 3 (USA) (Rev 1).nes");
+    nes.loadROM("../NESROMS/oficial/BestNESGames/Battletoads/Battletoads (Japan).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Lemmings (USA).nes");
 
     // nes.loadROM("../NESROMS/homebrew/All Hell Unleashed v6.66.nes");

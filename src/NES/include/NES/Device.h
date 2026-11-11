@@ -14,5 +14,7 @@ namespace NES
             virtual void write(uint16_t addr, uint8_t value) = 0;
 
             bool isWritable = 0;
+
+            virtual bool hasPendingIRQ() const { return false; }
     };
 }

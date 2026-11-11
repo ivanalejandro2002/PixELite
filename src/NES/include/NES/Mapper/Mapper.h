@@ -27,5 +27,8 @@ namespace NES
 
             virtual bool hasDynamicMirroring() const { return false; }
             virtual Mirroring getMapperMirroring() const { return Mirroring::Vertical; }
+
+            virtual bool irqState() const { return false; }
+            virtual void irqClear() {}
     };
 }

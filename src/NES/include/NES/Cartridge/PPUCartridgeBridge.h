@@ -39,5 +39,9 @@ namespace NES {
         Mirroring getActiveMirroring() const {
             return cartridge ? cartridge->getActiveMirroring() : Mirroring::Horizontal;
         }
+
+        void notifyAddress(uint16_t addr) {
+            if (cartridge) cartridge->notifyPpuAddress(addr);
+        }
     };
 }

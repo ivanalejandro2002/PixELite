@@ -223,7 +223,7 @@ namespace NES
 
         size_t totalPrgRamSize = prgRamSize + prgNvRamSize;
 
-        if (totalPrgRamSize == 0 && mapperNumber == 1) {
+        if (totalPrgRamSize == 0 && (mapperNumber == 1 || mapperNumber == 4)) {
             totalPrgRamSize = 8192; // 8 KB estándar de trabajo
         }
 
@@ -263,9 +263,12 @@ namespace NES
     }
 
     Mirroring Cartridge::getActiveMirroring() const {
-        if (mapper) {
-            return mapper->getMapperMirroring(); // Llama al método exclusivo del mapper
+        if (mirroring == Mirroring::FourScreen) {
+            return Mirroring::FourScreen;
         }
-        return mirroring; // Valor por defecto del header iNES
+        if (mapper && mapper->hasDynamicMirroring()) {
+            return mapper->getMapperMirroring();
+        }
+        return mirroring;
     }
 }
