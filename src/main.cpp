@@ -271,14 +271,27 @@ int main()
                     gui.currentState = NES::GUI::EmulationState::Running;
             }
 
+            // Verificar si el usuario solicitó avanzar exactamente 1 frame
+            bool stepOneFrame = gui.cmdStepFrame.exchange(false);
+            if (stepOneFrame) {
+                std::lock_guard<std::mutex> lock(gui.stateMutex);
+                if (gui.currentState == NES::GUI::EmulationState::Running) {
+                    // Si estaba corriendo, lo pasamos a Pausa y avanzamos solo este frame
+                    gui.currentState = NES::GUI::EmulationState::Paused;
+                } else if (gui.currentState != NES::GUI::EmulationState::Paused) {
+                    // Si no hay ROM activa, ignoramos el step
+                    stepOneFrame = false;
+                }
+            }
+
             NES::GUI::EmulationState stateNow;
             {
                 std::lock_guard<std::mutex> lock(gui.stateMutex);
                 stateNow = gui.currentState;
             }
 
-            // Si no está en ejecución (Pausado / Sin ROM / Detenido), dormimos brevemente
-            if (stateNow != NES::GUI::EmulationState::Running) {
+            // Si no está en ejecución NI se pidió avanzar un frame, dormimos brevemente
+            if (stateNow != NES::GUI::EmulationState::Running && !stepOneFrame) {
                 gui.emulationFps = 0.0f;
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 nextFrameTime = Clock::now();
@@ -434,6 +447,11 @@ int main()
                 if (key == gui.keyMap.right)  updateBit(7, isPressed);
 
                 atomicControllerState.store(currentButtons, std::memory_order_relaxed);
+
+                if (isPressed && !event.key.repeat) {
+                    if (key == SDLK_P) gui.cmdTogglePause = true;
+                    if (key == SDLK_F) gui.cmdStepFrame   = true;
+                }
             }
         }
 

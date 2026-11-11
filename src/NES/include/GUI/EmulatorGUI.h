@@ -107,6 +107,7 @@ namespace NES::GUI {
         std::atomic<bool> cmdStop{false};
         std::atomic<bool> cmdReset{false};
         std::atomic<bool> cmdTogglePause{false};
+        std::atomic<bool> cmdStepFrame{false};
         std::atomic<float> emulationFps{0.0f};
 
         void initOpenGLResources() {
@@ -211,33 +212,40 @@ namespace NES::GUI {
                 baseStyleInitialized = true;
             }
 
-            int winW = 1024, winH = 960;
-            SDL_GetWindowSize(window, &winW, &winH);
-
-            // Escala nativa del monitor (HiDPI / Wayland / X11 / Windows scaling)
             float displayScale = SDL_GetWindowDisplayScale(window);
             if (displayScale <= 0.0f) displayScale = 1.0f;
 
-            // Escala relativa al tamaño actual de la ventana (tomando 960p de altura como referencia 1.0x)
-            float windowRatio = std::min(
-                static_cast<float>(winW) / 1024.0f,
-                static_cast<float>(winH) / 960.0f
-            );
-
-            // Acotamos entre 0.75x (ventana muy pequeña) y 2.5x (4K / pantalla completa)
-            float targetScale = std::clamp(windowRatio * displayScale, 0.75f, 2.5f);
+            // Mantenemos la escala global estable en 1.0x (o el DPI del monitor)
+            // para que las barras superior/inferior y títulos de ventana tengan tamaño normal:
+            float targetScale = std::clamp(displayScale, 1.0f, 1.5f);
 
             if (std::abs(targetScale - currentUiScale) > 0.01f) {
                 currentUiScale = targetScale;
-
-                // Restaurar el estilo original y aplicar el nuevo factor relativo
                 ImGuiStyle& style = ImGui::GetStyle();
                 style = baseStyle;
                 style.ScaleAllSizes(currentUiScale);
-
-                // Escalar la fuente proporcionalmente
                 ImGui::GetIO().FontGlobalScale = currentUiScale;
             }
+        }
+
+        // Ajusta el tamaño de letra para que 'sampleLongestLine' y 'lineCount'
+        // encajen exactamente dentro del área interior actual de la subventana:
+        float fitFontToWindow(const char* sampleLongestLine, int lineCount) {
+            ImGui::SetWindowFontScale(1.0f); // Resetear primero para medir sin distorsión
+
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            ImVec2 baseTextSize = ImGui::CalcTextSize(sampleLongestLine);
+            float baseHeight = ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(lineCount);
+
+            if (baseTextSize.x <= 0.0f || baseHeight <= 0.0f) return 1.0f;
+
+            // Dejamos un 8% de margen de respiración para que nunca toque los bordes
+            float scaleX = (avail.x * 0.92f) / baseTextSize.x;
+            float scaleY = (avail.y * 0.92f) / baseHeight;
+
+            float scale = std::clamp(std::min(scaleX, scaleY), 0.45f, 1.6f);
+            ImGui::SetWindowFontScale(scale);
+            return scale;
         }
 
         const char* getStateText(EmulationState st) const {
@@ -314,6 +322,9 @@ namespace NES::GUI {
                     if (ImGui::MenuItem("Pausar / Continuar", "P", false, isRunningOrPaused)) {
                         cmdTogglePause = true;
                     }
+                    if (ImGui::MenuItem("Avanzar un frame", "F", false, isRunningOrPaused)) {
+                        cmdStepFrame = true;
+                    }
                     ImGui::Separator();
                     if (ImGui::MenuItem("Guardar Estado", "F5", false, isRunningOrPaused)) {}
                     if (ImGui::MenuItem("Guardar Estado Como...", "Shift+F5", false, isRunningOrPaused)) {}
@@ -322,7 +333,7 @@ namespace NES::GUI {
 
                 // 3. CONFIGURACIONES
                 if (ImGui::BeginMenu("Configuraciones")) {
-                    if (ImGui::MenuItem("Configuración de ventana")) {
+                    if (ImGui::MenuItem("Configuración de controles")) {
                         showControllerConfig = true;
                     }
                     ImGui::EndMenu();
@@ -394,21 +405,39 @@ namespace NES::GUI {
             ImGui::PopStyleVar(2);
         }
 
-        void renderSecondaryWindows(const DebugSnapshot& snap) {
-            const float em = ImGui::GetFontSize(); // Unidad relativa al tamaño de letra actual
+        // Calcula y aplica una escala de texto proporcional al tamaño actual de la subventana
+        void applyDynamicWindowFontScale(float baseWidth, float baseHeight) {
+            ImVec2 size = ImGui::GetWindowSize();
+            float scaleX = size.x / baseWidth;
+            float scaleY = size.y / baseHeight;
 
+            // Usamos el menor de los dos ejes para que el texto nunca se desborde ni horizontal ni verticalmente
+            float factor = std::min(scaleX, scaleY);
+
+            // Acotamos entre 0.55x (ventana muy chica) y 2.5x (ventana muy grande)
+            factor = std::clamp(factor, 0.55f, 2.5f);
+
+            ImGui::SetWindowFontScale(factor);
+        }
+
+        void renderSecondaryWindows(const DebugSnapshot& snap) {
             if (showControllerConfig) {
-                if (ImGui::Begin("Configuración de Controles", &showControllerConfig, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::SetNextWindowSize(ImVec2(380.0f, 320.0f), ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowSizeConstraints(ImVec2(200.0f, 170.0f), ImVec2(FLT_MAX, FLT_MAX));
+                if (ImGui::Begin("Configuración de Controles", &showControllerConfig)) {
+                    fitFontToWindow("Asignación de teclas del Control Original:   ", 10);
+                    const float localEm = ImGui::GetFontSize();
+
                     ImGui::Text("Asignación de teclas del Control Original:");
                     ImGui::Separator();
 
                     auto row = [&](const char* name, SDL_Keycode code, int idx) {
                         ImGui::Text("%-10s", name);
-                        ImGui::SameLine(em * 7.5f);
+                        ImGui::SameLine(localEm * 7.2f);
                         std::string label = (waitingForKeyIndex == idx)
                             ? "[ Presiona una tecla... ]"
                             : SDL_GetKeyName(code);
-                        if (ImGui::Button((label + "##btn" + std::to_string(idx)).c_str(), ImVec2(em * 12.0f, 0))) {
+                        if (ImGui::Button((label + "##btn" + std::to_string(idx)).c_str(), ImVec2(localEm * 11.5f, 0))) {
                             waitingForKeyIndex = idx;
                         }
                     };
@@ -421,13 +450,17 @@ namespace NES::GUI {
                     row("Botón B",   keyMap.b,      5);
                     row("Select",    keyMap.select, 6);
                     row("Start",     keyMap.start,  7);
+                    ImGui::SetWindowFontScale(1.0f);
                 }
                 ImGui::End();
             }
 
             if (showRomInfoWindow) {
-                ImGui::SetNextWindowSizeConstraints(ImVec2(em * 18.0f, 0), ImVec2(em * 30.0f, FLT_MAX));
-                if (ImGui::Begin("Información del ROM", &showRomInfoWindow, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::SetNextWindowSize(ImVec2(350.0f, 190.0f), ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowSizeConstraints(ImVec2(180.0f, 110.0f), ImVec2(FLT_MAX, FLT_MAX));
+                if (ImGui::Begin("Información del ROM", &showRomInfoWindow)) {
+                    fitFontToWindow("Nombre: Super Mario Bros. 3 (USA)", 7);
+
                     std::lock_guard<std::mutex> lock(stateMutex);
                     ImGui::Text("Nombre: %s", currentRomName.c_str());
                     ImGui::TextWrapped("Ruta: %s", currentRomPath.c_str());
@@ -435,27 +468,34 @@ namespace NES::GUI {
                     ImGui::Text("Mapper ID: %u", snap.mapperId);
                     ImGui::Text("PRG-ROM:   %zu KB", snap.prgSizeKB);
                     ImGui::Text("CHR:       %zu KB", snap.chrSizeKB);
+                    ImGui::SetWindowFontScale(1.0f);
                 }
                 ImGui::End();
             }
 
             if (showAboutWindow) {
-                if (ImGui::Begin("Ayuda - Acerca de", &showAboutWindow, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::SetNextWindowSize(ImVec2(340.0f, 130.0f), ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowSizeConstraints(ImVec2(180.0f, 80.0f), ImVec2(FLT_MAX, FLT_MAX));
+                if (ImGui::Begin("Ayuda - Acerca de", &showAboutWindow)) {
+                    fitFontToWindow("PixELite - Emulador Ciclo-Exacto de NES", 4);
+
                     ImGui::Text("PixELite - Emulador Ciclo-Exacto de NES");
                     ImGui::Separator();
                     ImGui::Text("Arquitectura Ricoh 2A03 / PPU 2C02");
+                    ImGui::SetWindowFontScale(1.0f);
                 }
                 ImGui::End();
             }
         }
 
         void renderDebugWindows(const DebugSnapshot& snap) {
-            ImGuiViewport* viewport = ImGui::GetMainViewport();
-            const float em = ImGui::GetFontSize();
-
-            // 1. CPU REGISTERS (Auto-ajustable al tamaño de la fuente)
+            // 1. CPU REGISTERS
             if (showCPURegisters) {
-                if (ImGui::Begin("CPU Registers", &showCPURegisters, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::SetNextWindowSize(ImVec2(280.0f, 210.0f), ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowSizeConstraints(ImVec2(140.0f, 110.0f), ImVec2(FLT_MAX, FLT_MAX));
+                if (ImGui::Begin("CPU Registers", &showCPURegisters)) {
+                    fitFontToWindow("N:0 V:0 -:1 B:0 D:0 I:1 Z:0 C:1", 9);
+
                     ImGui::Text("A:  $%02X (%3d)", snap.a, snap.a);
                     ImGui::Text("X:  $%02X (%3d)", snap.x, snap.x);
                     ImGui::Text("Y:  $%02X (%3d)", snap.y, snap.y);
@@ -469,13 +509,19 @@ namespace NES::GUI {
                         (snap.status >> 5) & 1, (snap.status >> 4) & 1,
                         (snap.status >> 3) & 1, (snap.status >> 2) & 1,
                         (snap.status >> 1) & 1, snap.status & 1);
+
+                    ImGui::SetWindowFontScale(1.0f); // Mantiene la barra de título en su tamaño normal
                 }
                 ImGui::End();
             }
 
-            // 2. PPU REGISTERS (Auto-ajustable al tamaño de la fuente)
+            // 2. PPU REGISTERS
             if (showPPURegisters) {
-                if (ImGui::Begin("PPURegisters", &showPPURegisters, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::SetNextWindowSize(ImVec2(300.0f, 240.0f), ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowSizeConstraints(ImVec2(150.0f, 120.0f), ImVec2(FLT_MAX, FLT_MAX));
+                if (ImGui::Begin("PPURegisters", &showPPURegisters)) {
+                    fitFontToWindow("Registros de Scrolling:   ", 11);
+
                     ImGui::Text("Registros $2000 - $2007:");
                     ImGui::Separator();
                     ImGui::Text("$2000 (PPUCTRL):   $%02X", snap.ppuCtrl);
@@ -488,15 +534,26 @@ namespace NES::GUI {
                     ImGui::Text("t (Temp Addr):  $%04X", snap.t);
                     ImGui::Text("Fine X:         %u", snap.fineX);
                     ImGui::Text("Write Toggle w: %d", snap.w ? 1 : 0);
+
+                    ImGui::SetWindowFontScale(1.0f);
                 }
                 ImGui::End();
             }
 
-            // 3. RAM ($0000 - $07FF): Ancho automático para las 16 columnas y alto del 40% de la ventana
+            // 3. RAM ($0000 - $07FF)
             if (showRAM) {
-                ImGui::SetNextWindowSize(ImVec2(em * 34.5f, viewport->Size.y * 0.40f), ImGuiCond_Always);
-                if (ImGui::Begin("RAM ($0000 - $07FF)", &showRAM, ImGuiWindowFlags_NoResize)) {
+                ImGui::SetNextWindowSize(ImVec2(540.0f, 360.0f), ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowSizeConstraints(ImVec2(220.0f, 120.0f), ImVec2(FLT_MAX, FLT_MAX));
+                if (ImGui::Begin("RAM ($0000 - $07FF)", &showRAM)) {
+                    ImGui::SetWindowFontScale(1.0f);
+                    // Medimos exactamente una fila hexadecimal de 16 bytes + barra de scroll:
+                    const char* sampleHexRow = "$0000: 00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00   ";
+                    float baseRowWidth = ImGui::CalcTextSize(sampleHexRow).x;
+                    float availW = ImGui::GetContentRegionAvail().x;
+                    float ramScale = std::clamp((availW * 0.95f) / baseRowWidth, 0.40f, 1.5f);
+
                     ImGui::BeginChild("RamHexRegion", ImVec2(0, 0), true);
+                    ImGui::SetWindowFontScale(ramScale);
                     ImGuiListClipper clipper;
                     clipper.Begin(2048 / 16);
                     while (clipper.Step()) {
@@ -515,7 +572,7 @@ namespace NES::GUI {
                 ImGui::End();
             }
 
-            // 4. PATTERN TABLES: Tamaño de imagen proporcional al alto de la ventana
+            // 4. PATTERN TABLES
             if (showPatternTables) {
                 if (snap.patternTablesUpdated) {
                     glBindTexture(GL_TEXTURE_2D, patternTex[0]);
@@ -525,21 +582,42 @@ namespace NES::GUI {
                     glBindTexture(GL_TEXTURE_2D, 0);
                 }
 
-                // Cada Pattern Table mide el 24% de la altura actual de la ventana
-                float tablePx = std::clamp(viewport->Size.y * 0.24f, 128.0f, 512.0f);
+                ImGui::SetNextWindowSize(ImVec2(540.0f, 310.0f), ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowSizeConstraints(ImVec2(220.0f, 140.0f), ImVec2(FLT_MAX, FLT_MAX));
 
-                if (ImGui::Begin("Pattern Tables", &showPatternTables, ImGuiWindowFlags_AlwaysAutoResize)) {
+                if (ImGui::Begin("Pattern Tables", &showPatternTables)) {
+                    ImGui::SetWindowFontScale(1.0f);
+
+                    ImVec2 avail = ImGui::GetContentRegionAvail();
+                    float spacing = ImGui::GetStyle().ItemSpacing.x;
+
+                    // Primero calculamos el tamaño exacto de cada imagen cuadrada (tablePx)
+                    float maxByWidth  = (avail.x - spacing) * 0.5f;
+                    float maxByHeight = avail.y - 26.0f;
+                    float tablePx = std::max(48.0f, std::min(maxByWidth, maxByHeight));
+
+                    // Escalamos la etiqueta para que NUNCA sea más ancha que tablePx
+                    float labelBaseW = ImGui::CalcTextSize("Pattern Table 0 ($0000)").x;
+                    float labelScale = std::clamp((tablePx * 0.95f) / labelBaseW, 0.45f, 1.15f);
+                    ImGui::SetWindowFontScale(labelScale);
+
+                    // Recalcular tablePx con la altura real que quedó en la etiqueta
+                    maxByHeight = avail.y - ImGui::GetTextLineHeightWithSpacing() - 4.0f;
+                    tablePx = std::max(48.0f, std::min(maxByWidth, maxByHeight));
+
                     ImGui::BeginGroup();
                     ImGui::Text("Pattern Table 0 ($0000)");
                     ImGui::Image((ImTextureID)(intptr_t)patternTex[0], ImVec2(tablePx, tablePx));
                     ImGui::EndGroup();
 
-                    ImGui::SameLine();
+                    ImGui::SameLine(tablePx + spacing + ImGui::GetWindowContentRegionMin().x);
 
                     ImGui::BeginGroup();
                     ImGui::Text("Pattern Table 1 ($1000)");
                     ImGui::Image((ImTextureID)(intptr_t)patternTex[1], ImVec2(tablePx, tablePx));
                     ImGui::EndGroup();
+
+                    ImGui::SetWindowFontScale(1.0f);
                 }
                 ImGui::End();
             }
