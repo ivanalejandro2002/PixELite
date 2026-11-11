@@ -132,10 +132,32 @@ namespace NES
             if (totalCpuCycles % 2 == 0) {
                 // Ciclo de LECTURA (Get)
                 uint16_t readAddr = (static_cast<uint16_t>(dmaPage) << 8) | dmaAddr;
-                if (readAddr >= 0x4000 && readAddr <= 0x401F && (targetAddr & 0xFFE0) != 0x4000) {
-                    dmaData = openBus.getValue();
+
+                if ((targetAddr & 0xFFE0) == 0x4000) {
+                    // La CPU está en $4000-$401F: los bits 4-0 de readAddr activan $4015/$4016/$4017
+                    uint16_t regOffset = readAddr & 0x001F;
+                    if (regOffset == 0x15 || regOffset == 0x16 || regOffset == 0x17) {
+                        uint8_t extByte = (readAddr >= 0x4000 && readAddr <= 0x401F)
+                                          ? openBus.getValue()
+                                          : this->read(readAddr);
+                        openBus.update(extByte);
+                        uint8_t regVal = this->read(0x4000 | regOffset);
+                        dmaData = (regOffset == 0x15) ? extByte : regVal;
+                        if (regOffset == 0x15) {
+                            openBus.update(extByte);
+                        }
+                    } else if (readAddr >= 0x4000 && readAddr <= 0x401F) {
+                        dmaData = openBus.getValue();
+                    } else {
+                        dmaData = this->read(readAddr);
+                    }
                 } else {
-                    dmaData = this->read(readAddr);
+                    // La CPU NO está en $4000-$401F: los registros del 2A03 ($4000-$401F) NO se activan
+                    if (readAddr >= 0x4000 && readAddr <= 0x401F) {
+                        dmaData = openBus.getValue();
+                    } else {
+                        dmaData = this->read(readAddr);
+                    }
                 }
             } else {
                 // Ciclo de ESCRITURA (Put) en $2004 (OAMDATA)
