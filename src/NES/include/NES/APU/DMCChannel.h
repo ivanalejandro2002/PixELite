@@ -65,6 +65,9 @@ namespace NES
             uint8_t loadDmaDelay = 0;
             uint8_t abortedDmaDelay = 0;
             bool abortedDmaRequested = false;
+
+            bool pendingAbortedDMA = false;
+            bool pendingFullReloadDMA = false;
             
             void startSample();
 

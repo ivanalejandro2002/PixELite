@@ -71,8 +71,8 @@ namespace NES
                 std::function<void(uint8_t)> deliverSample;
                 std::function<void()> onFrameConflict;
                 std::function<uint16_t()> getCpuAddress;
-                std::function<uint16_t()> getBytesRemaining;
-                std::function<void()> cancelRequest;
+                std::function<bool()> isAbortedRequested;
+                std::function<void()> clearAbortedRequest;
             };
 
             void setDMCHandler(DMCHandler handler) { dmcHandler = handler; }
@@ -119,8 +119,8 @@ namespace NES
             uint8_t dmaData = 0x00;
             uint16_t remainingDMACycles = 0;
 
-            uint64_t lastControllerReadCycle = 0xFFFFFFFFFFFFFFFFULL;
-            uint8_t lastControllerValue = 0;
+            uint64_t lastControllerReadCycle[2] = { 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL };
+            uint8_t lastControllerValue[2] = { 0, 0 };
 
             uint16_t cpuLastReadAddress = 0x0000;
     };

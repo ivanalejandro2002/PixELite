@@ -26,9 +26,14 @@ namespace NES
 
             void setButtonState(Button button, bool pressed);
 
+            void clock(uint64_t totalCpuCycles);
+
         private:
             uint8_t buttonStates = 0;
-            uint8_t shiftRegister = 0;
+            uint8_t shiftRegister = 0xFF;
+            uint8_t shiftRegister2 = 0xFF;
             bool strobeState = false;
+            bool pendingStrobe = false;
+            bool pendingStrobeValue = false;
     };
 }

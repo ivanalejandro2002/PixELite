@@ -904,9 +904,6 @@ namespace NES::CPU
 
         addressLow = static_cast<uint8_t>(lowerSum & 0xFF);
 
-        uint16_t wrongAddress = addressLow | (static_cast<uint16_t>(addressHigh) << 8);
-        if(pageCrossed) data = bus->read(wrongAddress);
-
         address =
             static_cast<uint16_t>(addressLow) |
             (static_cast<uint16_t>(addressHigh + pageCrossed) << 8);
@@ -923,9 +920,6 @@ namespace NES::CPU
         bool pageCrossed = (lowerSum & 0x100) != 0;
 
         addressLow = static_cast<uint8_t>(lowerSum & 0xFF);
-
-        uint16_t wrongAddress = addressLow | (static_cast<uint16_t>(addressHigh) << 8);
-        if(pageCrossed) data = bus->read(wrongAddress);
 
         address =
             static_cast<uint16_t>(addressLow) |
@@ -963,9 +957,6 @@ namespace NES::CPU
         bool pageCrossed = (lowerSum & 0x100) != 0;
 
         addressLow = static_cast<uint8_t>(lowerSum & 0xFF);
-
-        uint16_t wrongAddress = addressLow | (static_cast<uint16_t>(addressHigh) << 8);
-        data = bus->read(wrongAddress);
 
         address =
             static_cast<uint16_t>(addressLow) |

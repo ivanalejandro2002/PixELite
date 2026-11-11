@@ -132,7 +132,11 @@ namespace NES
             if (totalCpuCycles % 2 == 0) {
                 // Ciclo de LECTURA (Get)
                 uint16_t readAddr = (static_cast<uint16_t>(dmaPage) << 8) | dmaAddr;
-                dmaData = this->read(readAddr);
+                if (readAddr >= 0x4000 && readAddr <= 0x401F && (targetAddr & 0xFFE0) != 0x4000) {
+                    dmaData = openBus.getValue();
+                } else {
+                    dmaData = this->read(readAddr);
+                }
             } else {
                 // Ciclo de ESCRITURA (Put) en $2004 (OAMDATA)
                 this->write(0x2004, dmaData);
@@ -159,17 +163,18 @@ namespace NES
                     uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
                     this->read(targetAddr);
                 }
+                dmcState = DMCDMAState::Dummy;
+            } else if (dmcHandler.isAbortedRequested && dmcHandler.isAbortedRequested()) {
+                dmcHandler.clearAbortedRequest();
 
-                // DMA abortado de 1 ciclo: si no quedan bytes por transferir,
-                // termina en este único ciclo Halt y vuelve a Idle:
-                if (dmcHandler.getBytesRemaining && dmcHandler.getBytesRemaining() == 0) {
-                    if (dmcHandler.cancelRequest) {
-                        dmcHandler.cancelRequest();
-                    }
-                    dmcState = DMCDMAState::Idle;
+                // DMA abortado de 1 solo ciclo:
+                if (dmaActive) {
+                    clockDMA();
                 } else {
-                    dmcState = DMCDMAState::Dummy;
+                    uint16_t targetAddr = dmcHandler.getCpuAddress ? dmcHandler.getCpuAddress() : cpuLastReadAddress;
+                    this->read(targetAddr);
                 }
+                dmcState = DMCDMAState::Idle;
             }
             return;
         }
@@ -225,10 +230,13 @@ namespace NES
                     sample = (statusByte & 0xDF) | (romByte & 0x20);
                     openBus.update(romByte);
                 } else if (combinedAddr == 0x4016 || combinedAddr == 0x4017) {
+                    // 1. La lectura de la ROM coloca romByte en openBus (bits 7-5)
                     uint8_t romByte = this->read(dmcReadAddress);
+                    openBus.update(romByte);
+                    // 2. El buffer del puerto de mandos conduce los bits 4-0 y conserva los bits 7-5 de openBus (romByte)
                     uint8_t joyByte = this->read(combinedAddr);
-                    sample = romByte & joyByte;
-                    openBus.update(sample);
+                    sample = joyByte;
+                    openBus.update(joyByte);
                 } else {
                     sample = this->read(dmcReadAddress);
                     openBus.update(sample);
@@ -324,25 +332,20 @@ namespace NES
             {
                 uint8_t value = 0;
 
-                // Filtrado de lecturas consecutivas a $4016 (hardware de NES):
-                // Dos lecturas a $4016 en ciclos contiguos no pulsan el mando una segunda vez
-                if(addr == 0x4016)
+                // Filtrado de lecturas en ciclos consecutivos para $4016 y $4017:
+                if(addr == 0x4016 || addr == 0x4017)
                 {
-                    if(totalCpuCycles == lastControllerReadCycle + 1)
+                    int port = (addr == 0x4017) ? 1 : 0;
+                    if(totalCpuCycles == lastControllerReadCycle[port] + 1)
                     {
-                        value = lastControllerValue;
+                        value = lastControllerValue[port];
                     }
                     else
                     {
                         value = device -> read(addr);
-                        lastControllerValue = value;
+                        lastControllerValue[port] = value;
                     }
-                    lastControllerReadCycle = totalCpuCycles;
-                    value = (value & 0x1F) | (openBus.getValue() & 0xE0);
-                }
-                else if(addr == 0x4017)
-                {
-                    value = device -> read(addr);
+                    lastControllerReadCycle[port] = totalCpuCycles;
                     value = (value & 0x1F) | (openBus.getValue() & 0xE0);
                 }
                 else if(addr == 0x4015)
@@ -363,7 +366,6 @@ namespace NES
             }
         }
 
-        // Si ningún dispositivo maneja $4016 o $4017 (puerto 2 no conectado):
         if(addr == 0x4016 || addr == 0x4017)
         {
             uint8_t finalVal = openBus.getValue() & 0xE0;
