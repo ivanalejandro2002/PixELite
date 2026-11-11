@@ -31,14 +31,7 @@ namespace NES
         }
         else if (addr == 0x4017)
         {
-            if (strobeState)
-            {
-                shiftRegister2 = 0;
-                return 0;
-            }
-            uint8_t response = shiftRegister2 & 0x01;
-            shiftRegister2 = (shiftRegister2 >> 1) | 0x80;
-            return response;
+            return 0;
         }
         return 0;
     }
