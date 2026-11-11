@@ -62,6 +62,11 @@ namespace NES{
 
             Mirroring getActiveMirroring() const;
 
+            bool irqState() const { return mapper ? mapper->irqState() : false; }
+            void notifyPpuAddress(uint16_t addr) { if (mapper) mapper->notifyPpuaddress(addr); }
+
+            bool hasPendingIRQ() const override { return mapper ? mapper->irqState() : false; }
+
         private:
             std::vector<uint8_t> prgRom;
             std::vector<uint8_t> chrRom;

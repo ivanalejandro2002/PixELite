@@ -653,6 +653,17 @@ namespace NES
                     {
                         nextSpritePatternLowBytes[spriteIndex] = 0;
                         nextSpritePatternHighBytes[spriteIndex] = 0;
+
+                        // En hardware real, la PPU realiza fetches dummy del tile $FF
+                        // manteniendo activa la línea A12 correspondiente durante los ciclos 257-320:
+                        if (fetchStep == 5 || fetchStep == 7)
+                        {
+                            const bool is8x16 = (PPUCTRL & 0x20) != 0;
+                            uint16_t dummyBase = is8x16 ? 0x1000 : ((PPUCTRL & 0x08) ? 0x1000 : 0x0000);
+                            if (chrBridge.hasCartridge()) {
+                                chrBridge.notifyAddress(dummyBase | 0x0FF0);
+                            }
+                        }
                     }
                 }
             }
@@ -717,12 +728,26 @@ namespace NES
 
     uint8_t PPU2C02::readVRAM(uint16_t addr)
     {
-        return bus.read(addr & 0x3FFF);
+        uint16_t maskedAddr = addr & 0x3FFF;
+        if (chrBridge.hasCartridge()) {
+            ciram.setMirroring(chrBridge.getActiveMirroring());
+            if (maskedAddr < 0x3F00) {
+                chrBridge.notifyAddress(maskedAddr);
+            }
+        }
+        return bus.read(maskedAddr);
     }
 
     void PPU2C02::writeVRAM(uint16_t addr, uint8_t value)
     {
-        bus.write(addr & 0x3FFF, value);
+        uint16_t maskedAddr = addr & 0x3FFF;
+        if (chrBridge.hasCartridge()) {
+            ciram.setMirroring(chrBridge.getActiveMirroring());
+            if (maskedAddr < 0x3F00) {
+                chrBridge.notifyAddress(maskedAddr);
+            }
+        }
+        bus.write(maskedAddr, value);
     }
 
     uint8_t PPU2C02::readRegister(uint16_t addr)
@@ -964,6 +989,9 @@ namespace NES
             t |= value;
 
             v = t;
+            if (chrBridge.hasCartridge() && (v & 0x3FFF) < 0x3F00) {
+                chrBridge.notifyAddress(v & 0x3FFF);
+            }
 
             writeToggle = false;
         }

@@ -75,7 +75,12 @@ namespace NES
 
     bool Bus::getIRQLine()
     {
-        return IRQLine;
+        for (const Device* device : devices) {
+            if (device->hasPendingIRQ()) {
+                return false; // Activo en bajo: el cartucho/dispositivo solicita IRQ
+            }
+        }
+        return IRQLine; // Estado reportado por la APU
     }
 
     bool Bus::getNMIActivation()

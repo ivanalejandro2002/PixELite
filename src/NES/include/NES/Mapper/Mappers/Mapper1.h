@@ -1,69 +1,66 @@
 #pragma once
 #include <NES/Mapper/Mapper.h>
 #include <algorithm>
-
 #include <iostream>
 
 namespace NES {
 
 class Mapper1 : public Mapper {
 private:
-    // Registro de desplazamiento de 5 bits para MMC1
-    uint8_t shiftRegister = 0x10; // Arranca con el bit 4 en 1 (indica el inicio/fin del shift)
+    uint8_t shiftRegister = 0x10;
     uint8_t shiftCount = 0;
 
-    // Registros internos del MMC1
-    uint8_t control = 0x0C;       // Registro de control ($8000-$9FFF) -> Valor por defecto inicializa PRG mode 3
-    uint8_t chrBank0 = 0;         // Banco CHR 0 ($A000-$BFFF)
-    uint8_t chrBank1 = 0;         // Banco CHR 1 ($C000-$DFFF)
-    uint8_t prgBank = 0;          // Banco PRG ($E000-$FFFF)
+    uint8_t control = 0x0C;
+    uint8_t chrBank0 = 0;
+    uint8_t chrBank1 = 0;
+    uint8_t prgBank = 0;
 
-    // Offsets calculados para optimizar los mapeos en tiempo de lectura
     uint32_t prgOffsetLow = 0;
     uint32_t prgOffsetHigh = 0;
     uint32_t chrOffsetLow = 0;
     uint32_t chrOffsetHigh = 0;
 
-    // Función interna para actualizar los offsets físicos de memoria según los registros actuales
     void updateOffsets() {
+        // --- 1. CONFIGURACIÓN DE PRG (Bancos de 16 KB) ---
         uint8_t prgMode = (control >> 2) & 0x03;
         uint32_t last16kBank = (prgBanks > 0) ? (prgBanks - 1) : 0;
+        uint32_t selectedPrg = prgBank & 0x0F; // Ignorar bit 4 (WRAM disable)
 
         switch (prgMode) {
             case 0:
             case 1: // Modo 32KB (cambio de 32 KB completos en $8000-$FFFF)
                 {
-                    uint32_t baseBank = (prgBank & 0x0E); // Ignora el bit menos significativo
+                    uint32_t baseBank = (selectedPrg & 0x0E);
                     uint32_t safe32kBank = (prgBanks > 0) ? (baseBank % prgBanks) : 0;
                     prgOffsetLow = safe32kBank * 16384;
-                    // El segundo banco de 16KB de ese bloque de 32KB
-                    prgOffsetHigh = ((safe32kBank + 1) % prgBanks) * 16384; 
+                    prgOffsetHigh = ((safe32kBank + 1) % prgBanks) * 16384;
                 }
                 break;
             case 2: // Modo 16KB: Banco fijo de 16KB en $8000, conmutable en $C000
-                prgOffsetLow = 0; // Primer banco fijo
-                prgOffsetHigh = (prgBanks > 0) ? ((prgBank % prgBanks) * 16384) : 0;
+                prgOffsetLow = 0;
+                prgOffsetHigh = (prgBanks > 0) ? ((selectedPrg % prgBanks) * 16384) : 0;
                 break;
             case 3: // Modo 16KB: Conmutable en $8000, último banco fijo en $C000
-                prgOffsetLow = (prgBanks > 0) ? ((prgBank % prgBanks) * 16384) : 0;
+                prgOffsetLow = (prgBanks > 0) ? ((selectedPrg % prgBanks) * 16384) : 0;
                 prgOffsetHigh = last16kBank * 16384;
                 break;
         }
 
         // --- 2. CONFIGURACIÓN DE CHR (Ventanas de 4 KB o 8 KB) ---
         uint8_t chrMode = (control & 0x10) >> 4;
-        
-        // Protección para los bancos de gráficos CHR
-        uint32_t safeChrBank0 = (chrBanks > 0) ? (chrBank0 % chrBanks) : 0;
-        uint32_t safeChrBank1 = (chrBanks > 0) ? (chrBank1 % chrBanks) : 0;
+
+        // Total de bancos de 4KB disponibles (cada chrBank de iNES mide 8KB = 2 bancos de 4KB)
+        uint32_t total4kBanks = (chrBanks > 0) ? (chrBanks * 2) : 2;
 
         if (chrMode == 0) {
-            uint32_t bank8k = (safeChrBank0 & 0x1E) * 4096;
-            // Asegurarnos de que el banco de 8KB no rebase el límite
-            if (chrBanks > 0 && bank8k >= chrBanks * 4096) bank8k = 0;
-            chrOffsetLow = bank8k;
-            chrOffsetHigh = bank8k + 4096;
+            // Modo 8KB: usa chrBank0 ignorando el bit 0
+            uint32_t bank4k = (chrBank0 & 0x1E) % total4kBanks;
+            chrOffsetLow = bank4k * 4096;
+            chrOffsetHigh = chrOffsetLow + 4096;
         } else {
+            // Modo 4KB: dos ventanas independientes de 4KB
+            uint32_t safeChrBank0 = (chrBank0 & 0x1F) % total4kBanks;
+            uint32_t safeChrBank1 = (chrBank1 & 0x1F) % total4kBanks;
             chrOffsetLow = safeChrBank0 * 4096;
             chrOffsetHigh = safeChrBank1 * 4096;
         }
@@ -71,10 +68,13 @@ private:
 
 public:
     Mapper1(uint8_t prgBanks, uint8_t chrBanks) : Mapper(prgBanks, chrBanks) {
-        // Inicialización estándar del MMC1 al encender
-        control = 0x0C; // Modo PRG 3, Modo CHR 8KB, Mirroring por defecto
+        control = 0x0C;
+        chrBank0 = 0;
+        chrBank1 = 1; // Inicializar banco alto en el segundo bloque de 4KB por defecto
         updateOffsets();
     }
+
+    bool hasDynamicMirroring() const override { return true; }
 
     bool cpuMapRead(uint16_t addr, uint32_t& mappedAddr) override {
         if (addr >= 0x8000 && addr <= 0xBFFF) {
@@ -90,39 +90,27 @@ public:
 
     bool cpuMapWrite(uint16_t addr, uint32_t& mappedAddr, uint8_t data) override {
         if (addr >= 0x8000 && addr <= 0xFFFF) {
-            // Si el bit 7 está en 1, el MMC1 se reinicia por completo
             if (data & 0x80) {
                 shiftRegister = 0x10;
                 shiftCount = 0;
-                control = (control & ~0x1C) | 0x0C; // Asegura PRG mode 3 por defecto
+                control |= 0x0C; // Solo activa bits 2 y 3 (PRG mode 3), sin borrar CHR mode
                 updateOffsets();
                 return true;
             }
 
-            // Desplazamiento normal de 5 bits
             bool bit0 = (data & 0x01) != 0;
             shiftRegister = (shiftRegister >> 1) | (static_cast<uint8_t>(bit0) << 4);
             shiftCount++;
 
             if (shiftCount == 5) {
-                uint8_t finalValue = shiftRegister;
-                
-                // Extraer los bits 14 y 13 para saber exactamente a qué ventana de 8KB pertenece la dirección
+                uint8_t finalValue = shiftRegister & 0x1F;
                 uint8_t targetRegister = (addr >> 13) & 0x03;
 
                 switch (targetRegister) {
-                    case 0: // $8000 - $9FFF
-                        control = finalValue; 
-                        break;
-                    case 1: // $A000 - $BFFF
-                        chrBank0 = finalValue; 
-                        break;
-                    case 2: // $C000 - $DFFF
-                        chrBank1 = finalValue; 
-                        break;
-                    case 3: // $E000 - $FFFF
-                        prgBank = finalValue; 
-                        break;
+                    case 0: control  = finalValue; break; // $8000 - $9FFF
+                    case 1: chrBank0 = finalValue; break; // $A000 - $BFFF
+                    case 2: chrBank1 = finalValue; break; // $C000 - $DFFF
+                    case 3: prgBank  = finalValue; break; // $E000 - $FFFF
                 }
 
                 shiftRegister = 0x10;
@@ -136,12 +124,10 @@ public:
 
     bool ppuMapRead(uint16_t addr, uint32_t& mappedAddr) override {
         if (addr >= 0x0000 && addr <= 0x0FFF) {
-            // Primera ventana PPU de 4 KB
             mappedAddr = chrOffsetLow + addr;
             return true;
         }
         else if (addr >= 0x1000 && addr <= 0x1FFF) {
-            // Segunda ventana PPU de 4 KB
             mappedAddr = chrOffsetHigh + (addr - 0x1000);
             return true;
         }
@@ -149,9 +135,13 @@ public:
     }
 
     bool ppuMapWrite(uint16_t addr, uint32_t& mappedAddr) override {
-        // Soporte para CHR-RAM en caso de que el juego lo requiera
-        if (addr >= 0x0000 && addr <= 0x1FFF) {
-            mappedAddr = addr;
+        // Sin "if (chrBanks == 0)" porque Cartridge ya asigna chrBanks = 1 para CHR-RAM
+        if (addr >= 0x0000 && addr <= 0x0FFF) {
+            mappedAddr = chrOffsetLow + addr;
+            return true;
+        }
+        else if (addr >= 0x1000 && addr <= 0x1FFF) {
+            mappedAddr = chrOffsetHigh + (addr - 0x1000);
             return true;
         }
         return false;
@@ -169,4 +159,4 @@ public:
     }
 };
 
-} // namespace NES
+}
