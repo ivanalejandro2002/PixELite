@@ -47,6 +47,12 @@ namespace NES
 
             static std::vector<uint8_t> createTestProgram();
             static std::vector<uint8_t> createTestCHR();
+
+            const CPU::MOS6502& getCPU() const { return cpu; }
+            CPU::MOS6502& getCPU() { return cpu; }
+
+            const Cartridge& getCartridge() const { return cartridge; }
+            Cartridge& getCartridge() { return cartridge; }
         private:
             
 

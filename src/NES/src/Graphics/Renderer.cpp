@@ -283,60 +283,45 @@ namespace TT::Graphics
     }
 
     void Renderer::renderFrame(
-        const NES::Graphics::FrameBuffer& frameBuffer
+        const NES::Graphics::FrameBuffer& frameBuffer,
+        int availX,
+        int availY,
+        int availWidth,
+        int availHeight
     )
     {
         if(!initialized || window == nullptr)
             return;
 
-        int windowWidth = 0;
-        int windowHeight = 0;
-
-        if(!SDL_GetWindowSizeInPixels(
-            window,
-            &windowWidth,
-            &windowHeight
-        ))
+        if(availWidth <= 0 || availHeight <= 0)
         {
-            return;
+            if(!SDL_GetWindowSizeInPixels(window, &availWidth, &availHeight))
+                return;
+            availX = 0;
+            availY = 0;
         }
 
-        if(windowWidth <= 0 || windowHeight <= 0)
+        if(availWidth <= 0 || availHeight <= 0)
             return;
 
-        // Mantener la proporción 256:240 sin deformar la imagen.
+        // Mantener la proporción 256:240 sin deformar la imagen dentro del área disponible
         constexpr float aspectRatio =
             static_cast<float>(NES::Graphics::FrameBuffer::Width) /
             NES::Graphics::FrameBuffer::Height;
 
-        int viewportWidth = windowWidth;
-        int viewportHeight = static_cast<int>(
-            viewportWidth / aspectRatio
-        );
+        int viewportWidth = availWidth;
+        int viewportHeight = static_cast<int>(viewportWidth / aspectRatio);
 
-        if(viewportHeight > windowHeight)
+        if(viewportHeight > availHeight)
         {
-            viewportHeight = windowHeight;
-            viewportWidth = static_cast<int>(
-                viewportHeight * aspectRatio
-            );
+            viewportHeight = availHeight;
+            viewportWidth = static_cast<int>(viewportHeight * aspectRatio);
         }
 
-        const int viewportX = (windowWidth - viewportWidth) / 2;
-        const int viewportY = (windowHeight - viewportHeight) / 2;
+        const int viewportX = availX + (availWidth - viewportWidth) / 2;
+        const int viewportY = availY + (availHeight - viewportHeight) / 2;
 
-        glViewport(0, 0, windowWidth, windowHeight);
-
-        // Fondo negro alrededor de la imagen.
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        glViewport(
-            viewportX,
-            viewportY,
-            viewportWidth,
-            viewportHeight
-        );
+        glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
 
         // Actualizar la textura con los píxeles del framebuffer.
         glActiveTexture(GL_TEXTURE0);
@@ -364,9 +349,6 @@ namespace TT::Graphics
         glBindVertexArray(0);
         glBindTexture(GL_TEXTURE_2D, 0);
         glUseProgram(0);
-
-        // No se intercambian los buffers aquí.
-        // El bucle principal debe llamar SDL_GL_SwapWindow().
     }
 
     void Renderer::destroy()
