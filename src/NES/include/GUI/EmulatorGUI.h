@@ -364,6 +364,9 @@ namespace NES::GUI {
             ImGuiViewport* viewport = ImGui::GetMainViewport();
             bottomBarHeight = ImGui::GetFrameHeight() + 4.0f;
 
+            // Anclar obligatoriamente dentro del Viewport de la ventana principal
+            // (evita que Multi-Viewport cree una ventana del SO separada para la barra):
+            ImGui::SetNextWindowViewport(viewport->ID);
             ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + viewport->Size.y - bottomBarHeight));
             ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, bottomBarHeight));
 
@@ -373,12 +376,16 @@ namespace NES::GUI {
                 ImGuiWindowFlags_NoMove |
                 ImGuiWindowFlags_NoScrollbar |
                 ImGuiWindowFlags_NoSavedSettings |
-                ImGuiWindowFlags_NoBringToFrontOnFocus;
+                ImGuiWindowFlags_NoDocking |
+                ImGuiWindowFlags_NoFocusOnAppearing |
+                ImGuiWindowFlags_NoNav;
 
             ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 3.0f));
 
             if (ImGui::Begin("##BottomStatusBar", nullptr, flags)) {
+                ImGui::SetWindowFontScale(1.0f);
+
                 EmulationState st;
                 std::string romLabel;
                 {

@@ -123,6 +123,12 @@ void extractPatternTables(NES::NES& nes, NES::GUI::DebugSnapshot& snap)
 
 int main()
 {
+    // En Linux (GNOME/Wayland), forzar el backend X11 (XWayland) permite que
+    // SDL3 e ImGui creen ventanas Multi-Viewport independientes fuera de la ventana principal:
+    #ifdef __linux__
+    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "x11,wayland");
+    #endif
+
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
         std::cerr << "Error al inicializar SDL3: " << SDL_GetError() << '\n';
         return 1;
@@ -165,11 +171,18 @@ int main()
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    #ifdef ImGuiConfigFlags_ViewportsEnable
-    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Permite arrastrar ventanas de Debug fuera de la ventana principal
-    #endif
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // Permite acoplar ventanas
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Permite sacar ventanas fuera de la ventana principal
 
     ImGui::StyleColorsDark();
+
+    // Cuando Viewports está activo, ajustamos WindowRounding y el alfa del fondo
+    // para que las ventanas que salen al escritorio se vean como ventanas nativas:
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.WindowRounding = 0.0f;
+        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+    }
 
     // Cargar fuente TrueType a buen tamaño base (24px) para que al escalar dinámicamente se vea nítida
     const char* fontPaths[] = {
@@ -422,6 +435,11 @@ int main()
                 appRunning = false;
             }
 
+            if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
+                event.window.windowID == SDL_GetWindowID(window)) {
+                appRunning = false;
+            }
+
             if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
             {
                 bool isPressed = (event.type == SDL_EVENT_KEY_DOWN);
@@ -516,6 +534,19 @@ int main()
             SDL_GL_MakeCurrent(backupWin, backupCtx);
         }
         #endif
+
+        // Restaurar viewport completo y pintar las barras de ImGui encima del marco
+        glViewport(0, 0, winW, winH);
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            SDL_Window* backupWin = SDL_GL_GetCurrentWindow();
+            SDL_GLContext backupCtx = SDL_GL_GetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            SDL_GL_MakeCurrent(backupWin, backupCtx);
+        }
 
         SDL_GL_SwapWindow(window);
     }
