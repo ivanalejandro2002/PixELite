@@ -777,12 +777,6 @@ namespace NES::CPU
     void MOS6502::fetchOpcode()
     {
         opcode = bus->read(PC);
-        if (PC >= 0x4000 && PC <= 0x4020) {
-            std::cout << std::hex << "[Exec4000] PC=$" << PC
-                      << " op=$" << (int)opcode
-                      << " A=$" << (int)A << " S=$" << (int)S
-                      << " P=$" << (int)status.getByte() << "\n";
-        }
         incrementPC();
     }
 
@@ -797,8 +791,14 @@ namespace NES::CPU
         executeInstruction();
     }
 
+    static uint64_t cycleBeforeHighFetch = 0;
+    static bool rdyLowBeforeWrite = false;
+
     void MOS6502::dummyRead()
     {
+        // Si hubo ciclos de pausa por DMA entre la lectura del byte alto/dummyRead y la escritura:
+        rdyLowBeforeWrite = (bus->totalCpuCycles > cycleBeforeHighFetch + 2);
+
         uint16_t dummyAddress = 
             static_cast<uint16_t>(addressLow) |
             (static_cast<uint16_t>(addressHigh) << 8);
@@ -875,6 +875,9 @@ namespace NES::CPU
                 (address & 0xFF00) |
                 static_cast<uint8_t>(addressLow)
             );
+
+        cycleBeforeHighFetch = bus->totalCpuCycles;
+        rdyLowBeforeWrite = false;
     }
     void MOS6502::fetchAddressHigh()
     {
@@ -941,6 +944,9 @@ namespace NES::CPU
                 (address & 0xFF00) |
                 static_cast<uint8_t>(address + 1)
             );
+
+        cycleBeforeHighFetch = bus->totalCpuCycles;
+        rdyLowBeforeWrite = false;
     }
     
     void MOS6502::fetchIndirectHigh()
@@ -1251,11 +1257,6 @@ namespace NES::CPU
             static_cast<uint16_t>(addressLow) |
             (static_cast<uint16_t>(addressHigh) << 8);
         
-        if (PC >= 0x4000 && PC <= 0x4010) {
-            std::cout << std::hex << "[RTI_from_4001] Returning to PC=$" << address
-                      << " P=$" << (int)status.getByte() << " S=$" << (int)S << "\n";
-        }
-
         PC = address;
     }
 
@@ -1806,6 +1807,13 @@ namespace NES::CPU
 
     void MOS6502::executeAHX()
     {
+        if (rdyLowBeforeWrite)
+        {
+            uint8_t value = A & X;
+            bus->write(address, value);
+            return;
+        }
+
         uint8_t value = A & X & static_cast<uint8_t>(addressHigh + 1);
 
         bool pageCrossed = (addressLow < Y);
@@ -1824,8 +1832,16 @@ namespace NES::CPU
         
         bus->write(finalAddress, value);
     }
+
     void MOS6502::executeSHX()
     {
+        if (rdyLowBeforeWrite)
+        {
+            uint8_t value = X;
+            bus->write(address, value);
+            return;
+        }
+
         uint8_t value = X & (static_cast<uint8_t>(addressHigh + 1));
         bool pageCrossed = (addressLow < Y);
 
@@ -1834,7 +1850,7 @@ namespace NES::CPU
         if(pageCrossed)
         {
             uint8_t highByte = value;
-            finalAddress = finalAddress = (static_cast<uint16_t>(highByte) << 8) | addressLow;
+            finalAddress = (static_cast<uint16_t>(highByte) << 8) | addressLow;
         }
         else
         {
@@ -1844,8 +1860,16 @@ namespace NES::CPU
         
         bus->write(finalAddress, value);
     }
+
     void MOS6502::executeSHY()
     {
+        if (rdyLowBeforeWrite)
+        {
+            uint8_t value = Y;
+            bus->write(address, value);
+            return;
+        }
+
         uint8_t value = Y & (static_cast<uint8_t>(addressHigh + 1));
         bool pageCrossed = (addressLow < X);
 
@@ -1854,7 +1878,7 @@ namespace NES::CPU
         if(pageCrossed)
         {
             uint8_t highByte = value;
-            finalAddress = finalAddress = (static_cast<uint16_t>(highByte) << 8) | addressLow;
+            finalAddress = (static_cast<uint16_t>(highByte) << 8) | addressLow;
         }
         else
         {
@@ -1868,6 +1892,14 @@ namespace NES::CPU
     void MOS6502::executeTAS()
     {
         S = A & X;
+
+        if (rdyLowBeforeWrite)
+        {
+            uint8_t value = S;
+            bus->write(address, value);
+            return;
+        }
+
         uint8_t value = S & (static_cast<uint8_t>(addressHigh + 1));
 
         bool pageCrossed = (addressLow < Y);
@@ -1877,7 +1909,7 @@ namespace NES::CPU
         if(pageCrossed)
         {
             uint8_t highByte = value;
-            finalAddress = finalAddress = (static_cast<uint16_t>(highByte) << 8) | addressLow;
+            finalAddress = (static_cast<uint16_t>(highByte) << 8) | addressLow;
         }
         else
         {
