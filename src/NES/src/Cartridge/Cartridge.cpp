@@ -120,8 +120,11 @@ namespace NES
         hasBattery = (header.flags6 & 0x02) != 0;
         hasTrainer = (header.flags6 & 0x04) != 0;
 
-        if(hardWiredFourScreen) mirroring = Mirroring::FourScreen;
-        else if(header.flags6 & 0x01) mirroring = Mirroring::Vertical;
+        if (mapperNumber == 30 && (header.flags6 & 0x09) == 0x08) {
+            mirroring = Mirroring::SingleScreenLower; // 1-Screen dinámico controlado por bit 7 del Mapper 30
+        }
+        else if (hardWiredFourScreen) mirroring = Mirroring::FourScreen;
+        else if (header.flags6 & 0x01) mirroring = Mirroring::Vertical;
         else mirroring = Mirroring::Horizontal;
 
         size_t prgSize = 0;
@@ -217,7 +220,8 @@ namespace NES
         }
         else
         {
-            size_t allocatedChrRam = (chrRamSize > 0) ? chrRamSize : 8192;
+            size_t defaultChrRam = (mapperNumber == 30) ? 32768 : 8192;
+            size_t allocatedChrRam = (chrRamSize > 0) ? chrRamSize : defaultChrRam;
             chrRom.resize(allocatedChrRam, 0);
         }
 

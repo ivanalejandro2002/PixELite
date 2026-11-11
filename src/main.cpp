@@ -427,7 +427,7 @@ int main()
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Mario/Super Mario Bros. (World).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Mario/Super Mario Bros. 2 (USA) (Rev 1).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Mario/Super Mario Bros. 3 (USA) (Rev 1).nes");
-    nes.loadROM("../NESROMS/oficial/BestNESGames/Battletoads/Battletoads (Japan).nes");
+    // nes.loadROM("../NESROMS/oficial/BestNESGames/Battletoads/Battletoads (Japan).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Lemmings (USA).nes");
 
     // nes.loadROM("../NESROMS/homebrew/All Hell Unleashed v6.66.nes");
@@ -436,6 +436,10 @@ int main()
     // nes.loadROM("../NESROMS/homebrew/Penguin Sokoban Adventure v1.1.nes");
     // nes.loadROM("../NESROMS/homebrew/Spacegulls-1.1.nes");
     // nes.loadROM("../NESROMS/homebrew/Super Bat Puncher Demo.nes");
+
+    // nes.loadROM("../NESROMS/homebrew/Mega_Kaiju_Boom_Ball_Demo_Sept 19.nes");
+    // nes.loadROM("../NESROMS/homebrew/Catventure - the rad cat quest v1.01.nes");
+    // nes.loadROM("../NESROMS/homebrew/NecroNancyDemo.nes");
 
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Mega Man/Mega Man (USA).nes");
     // nes.loadROM("../NESROMS/AC/AccuracyCoin-main/AccuracyCoin.nes");

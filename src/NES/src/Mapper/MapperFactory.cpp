@@ -16,6 +16,8 @@ namespace NES {
                 return std::make_unique<Mapper4>(prgBanks, chrBanks);
             case 7:
                 return std::make_unique<Mapper7>(prgBanks, chrBanks);
+            case 30:
+                return std::make_unique<Mapper30>(prgBanks, chrBanks);
             default:
                 std::cerr << "[MapperFactory] Error: Mapper " << mapperNumber << " no soportado o no implementado.\n";
                 return nullptr;
