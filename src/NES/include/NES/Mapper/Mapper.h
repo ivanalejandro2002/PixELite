@@ -25,6 +25,7 @@ namespace NES
 
             virtual void notifyPpuaddress(uint16_t addr) {}
 
+            virtual bool hasDynamicMirroring() const { return false; }
             virtual Mirroring getMapperMirroring() const { return Mirroring::Vertical; }
     };
 }

@@ -717,11 +717,17 @@ namespace NES
 
     uint8_t PPU2C02::readVRAM(uint16_t addr)
     {
+        if (chrBridge.hasCartridge()) {
+            ciram.setMirroring(chrBridge.getActiveMirroring());
+        }
         return bus.read(addr & 0x3FFF);
     }
 
     void PPU2C02::writeVRAM(uint16_t addr, uint8_t value)
     {
+        if (chrBridge.hasCartridge()) {
+            ciram.setMirroring(chrBridge.getActiveMirroring());
+        }
         bus.write(addr & 0x3FFF, value);
     }
 

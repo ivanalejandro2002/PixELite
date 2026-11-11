@@ -424,7 +424,7 @@ int main()
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Dig Dug (Japan).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Zelda/Legend of Zelda, The (USA) (Rev 1).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Metroid (USA).nes");
-    // nes.loadROM("../NESROMS/oficial/BestNESGames/Mario/Super Mario Bros. (World).nes");
+    nes.loadROM("../NESROMS/oficial/BestNESGames/Mario/Super Mario Bros. (World).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Lemmings (USA).nes");
 
     // nes.loadROM("../NESROMS/homebrew/All Hell Unleashed v6.66.nes");
@@ -435,7 +435,7 @@ int main()
     // nes.loadROM("../NESROMS/homebrew/Super Bat Puncher Demo.nes");
 
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Mega Man/Mega Man (USA).nes");
-    nes.loadROM("../NESROMS/AC/AccuracyCoin-main/AccuracyCoin.nes");
+    // nes.loadROM("../NESROMS/AC/AccuracyCoin-main/AccuracyCoin.nes");
 
 
     for (int i = 0; i < 8; ++i) {

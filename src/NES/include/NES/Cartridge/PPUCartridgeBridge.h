@@ -34,5 +34,10 @@ namespace NES {
                 cartridge->ppuWrite(addr, value);
             }
         }
+
+        bool hasCartridge() const { return cartridge != nullptr; }
+        Mirroring getActiveMirroring() const {
+            return cartridge ? cartridge->getActiveMirroring() : Mirroring::Horizontal;
+        }
     };
 }
