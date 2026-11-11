@@ -426,6 +426,14 @@ int main()
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Metroid (USA).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Mario/Super Mario Bros. (World).nes");
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Lemmings (USA).nes");
+
+    // nes.loadROM("../NESROMS/homebrew/All Hell Unleashed v6.66.nes");
+    // nes.loadROM("../NESROMS/homebrew/Banana Bash! Demo.nes");
+    // nes.loadROM("../NESROMS/homebrew/from_below_2020_09_16_v_1_0_0.nes");
+    // nes.loadROM("../NESROMS/homebrew/Penguin Sokoban Adventure v1.1.nes");
+    // nes.loadROM("../NESROMS/homebrew/Spacegulls-1.1.nes");
+    // nes.loadROM("../NESROMS/homebrew/Super Bat Puncher Demo.nes");
+
     // nes.loadROM("../NESROMS/oficial/BestNESGames/Mega Man/Mega Man (USA).nes");
     nes.loadROM("../NESROMS/AC/AccuracyCoin-main/AccuracyCoin.nes");
 

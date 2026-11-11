@@ -28,6 +28,9 @@ namespace NES
         irqFlag = false;
         dmaRequested = false;
         loadDmaDelay = 0;
+        pendingAbortedDMA = false;
+        pendingFullReloadDMA = false;
+        abortedDmaRequested = false;
     }
 
     void DMCChannel::setEnabled(bool enable)
@@ -35,29 +38,52 @@ namespace NES
         enabled = enable;
         if(!enabled)
         {
-            // Explicit DMA Abort: si una muestra estaba activa y se deshabilita
-            // cuando faltan 2 o menos ciclos para el reload del timer:
-            if(bytesRemaining > 0 && bitsRemaining == 1 && timerCounter <= 2)
+            pendingAbortedDMA = false;
+            pendingFullReloadDMA = false;
+            abortedDmaRequested = false;
+
+            // Si un Reload DMA NO se ha disparado aún en este ciclo, evaluamos a cuántos
+            // ciclos estamos del próximo reload (cuando bitsRemaining == 1):
+            if(!dmaRequested && bytesRemaining > 0 && bitsRemaining == 1)
             {
-                dmaRequested = true; // El 2A03 ya agendó el halt internamente
+                if(timerCounter == 2 || timerCounter == 1)
+                {
+                    // Explicit Abort: 2 o 3 ciclos antes de T_reload -> DMA de 1 ciclo en T_reload
+                    pendingAbortedDMA = true;
+                }
+                else if(timerCounter == 0)
+                {
+                    // 1 ciclo antes de T_reload (mismo ciclo de APU) -> el Reload DMA completo aún ocurre
+                    pendingFullReloadDMA = true;
+                }
             }
-            else
+
+            // Si había un Load DMA contando:
+            if(loadDmaDelay > 0)
             {
-                dmaRequested = false;
+                if(loadDmaDelay <= 2)
+                {
+                    abortedDmaRequested = true;
+                }
+                loadDmaDelay = 0;
             }
 
             bytesRemaining = 0;
-            loadDmaDelay = 0;
+            // NOTA: Si dmaRequested ya era true (ej. STA $4015 escribió justo en T_reload
+            // retrasando el halt por 1 ciclo de escritura), NO se pone dmaRequested = false.
         }
         else
         {
             if(bytesRemaining == 0)
             {
                 startSample();
+                dmaRequested = false;
+                pendingAbortedDMA = false;
+                pendingFullReloadDMA = false;
+                abortedDmaRequested = false;
 
                 if(bufferEmpty && bytesRemaining > 0)
                 {
-                    // Load DMA: +4 ciclos si es ciclo par (GET), +3 si es impar (PUT)
                     loadDmaDelay = ((busReference.totalCpuCycles & 1) == 0) ? 4 : 3;
                 }
             }
@@ -138,7 +164,31 @@ namespace NES
             if(bitsRemaining == 0)
             {
                 bitsRemaining = 8;
-                if(bufferEmpty)
+
+                if(pendingAbortedDMA)
+                {
+                    pendingAbortedDMA = false;
+                    abortedDmaRequested = true;
+                    if(!bufferEmpty)
+                    {
+                        silenceFlag = false;
+                        shiftRegister = sampleBuffer;
+                        bufferEmpty = true;
+                    }
+                    else
+                    {
+                        silenceFlag = true;
+                    }
+                }
+                else if(pendingFullReloadDMA)
+                {
+                    pendingFullReloadDMA = false;
+                    silenceFlag = false;
+                    shiftRegister = sampleBuffer;
+                    bufferEmpty = true;
+                    dmaRequested = true;
+                }
+                else if(bufferEmpty)
                 {
                     silenceFlag = true;
                 }
@@ -148,8 +198,8 @@ namespace NES
                     shiftRegister = sampleBuffer;
                     bufferEmpty = true;
 
-                    // Reload DMA: solicita DMA inmediatamente al vaciar el buffer
-                    if(bytesRemaining > 0)
+                    // Solo solicitar Reload DMA si no hay ya un Load DMA esperando sus 3 o 4 ciclos:
+                    if(bytesRemaining > 0 && loadDmaDelay == 0)
                     {
                         dmaRequested = true;
                     }
@@ -168,31 +218,45 @@ namespace NES
         bufferEmpty = false;
         dmaRequested = false;
 
+        uint16_t prevAddress = currentAddress;
         currentAddress++;
         if(currentAddress == 0x0000)
         {
             currentAddress = 0x8000;
         }
 
-        bytesRemaining--;
-        if(bytesRemaining == 0)
+        if(bytesRemaining > 0)
         {
-            if(loopFlag)
+            bytesRemaining--;
+            if(bytesRemaining == 0)
             {
-                startSample();
-            }
-            else
-            {
-                if(irqEnabled)
+                if(loopFlag)
                 {
-                    irqFlag = true;
-                    busReference.setIRQLine(false);
+                    startSample();
                 }
-
-                // Implicit DMA Abort: la muestra terminó justo en el ciclo de APU previo a un Reload DMA:
-                if(bitsRemaining == 1 && timerCounter <= 2)
+                else
                 {
-                    dmaRequested = true;
+                    if(irqEnabled)
+                    {
+                        irqFlag = true;
+                        busReference.setIRQLine(false);
+                    }
+
+                    // Implicit DMA Abort:
+                    if(bitsRemaining == 1)
+                    {
+                        if(timerCounter == 2 || timerCounter == 1)
+                        {
+                            // Terminó en el ciclo de APU previo a T_reload -> DMA de 1 ciclo en T_reload
+                            pendingAbortedDMA = true;
+                        }
+                        else if(timerCounter == 0)
+                        {
+                            // Terminó 1 ciclo antes de T_reload -> Reload DMA inesperado desde la misma dirección
+                            currentAddress = prevAddress;
+                            pendingFullReloadDMA = true;
+                        }
+                    }
                 }
             }
         }
