@@ -777,6 +777,12 @@ namespace NES::CPU
     void MOS6502::fetchOpcode()
     {
         opcode = bus->read(PC);
+        if (PC >= 0x4000 && PC <= 0x4020) {
+            std::cout << std::hex << "[Exec4000] PC=$" << PC
+                      << " op=$" << (int)opcode
+                      << " A=$" << (int)A << " S=$" << (int)S
+                      << " P=$" << (int)status.getByte() << "\n";
+        }
         incrementPC();
     }
 
@@ -1245,6 +1251,11 @@ namespace NES::CPU
             static_cast<uint16_t>(addressLow) |
             (static_cast<uint16_t>(addressHigh) << 8);
         
+        if (PC >= 0x4000 && PC <= 0x4010) {
+            std::cout << std::hex << "[RTI_from_4001] Returning to PC=$" << address
+                      << " P=$" << (int)status.getByte() << " S=$" << (int)S << "\n";
+        }
+
         PC = address;
     }
 

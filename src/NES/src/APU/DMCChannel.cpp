@@ -77,12 +77,11 @@ namespace NES
             if(bytesRemaining == 0)
             {
                 startSample();
-                dmaRequested = false;
                 pendingAbortedDMA = false;
                 pendingFullReloadDMA = false;
                 abortedDmaRequested = false;
 
-                if(bufferEmpty && bytesRemaining > 0)
+                if(bytesRemaining > 0)
                 {
                     loadDmaDelay = ((busReference.totalCpuCycles & 1) == 0) ? 4 : 3;
                 }

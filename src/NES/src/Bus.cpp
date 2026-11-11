@@ -124,7 +124,6 @@ namespace NES
             }
         } else if (oamNeedRealign) {
             // Ciclo PUT inmediatamente posterior a que Get de DMC DMA pausó a OAM DMA:
-            // OAM DMA no puede hacer Get en ciclo PUT, así que se realinea leyendo del bus
             this->read(targetAddr);
             oamNeedRealign = false;
         } else {
@@ -132,31 +131,36 @@ namespace NES
             if (totalCpuCycles % 2 == 0) {
                 // Ciclo de LECTURA (Get)
                 uint16_t readAddr = (static_cast<uint16_t>(dmaPage) << 8) | dmaAddr;
+                bool cpuInApuRange = (targetAddr & 0xFFE0) == 0x4000;
+                bool isApuRegAddr = (readAddr >= 0x4000 && readAddr <= 0x401F);
 
-                if ((targetAddr & 0xFFE0) == 0x4000) {
-                    // La CPU está en $4000-$401F: los bits 4-0 de readAddr activan $4015/$4016/$4017
-                    uint16_t regOffset = readAddr & 0x001F;
-                    if (regOffset == 0x15 || regOffset == 0x16 || regOffset == 0x17) {
-                        uint8_t extByte = (readAddr >= 0x4000 && readAddr <= 0x401F)
-                                          ? openBus.getValue()
-                                          : this->read(readAddr);
-                        openBus.update(extByte);
-                        uint8_t regVal = this->read(0x4000 | regOffset);
-                        dmaData = (regOffset == 0x15) ? extByte : regVal;
-                        if (regOffset == 0x15) {
-                            openBus.update(extByte);
-                        }
-                    } else if (readAddr >= 0x4000 && readAddr <= 0x401F) {
+                if (!cpuInApuRange) {
+                    // Si la CPU no está en $4000-$401F, OAM DMA no puede activar $4015-$4017
+                    if (readAddr >= 0x4015 && readAddr <= 0x4017) {
                         dmaData = openBus.getValue();
                     } else {
                         dmaData = this->read(readAddr);
                     }
                 } else {
-                    // La CPU NO está en $4000-$401F: los registros del 2A03 ($4000-$401F) NO se activan
-                    if (readAddr >= 0x4000 && readAddr <= 0x401F) {
-                        dmaData = openBus.getValue();
+                    // La CPU está en $4000-$401F: los bits 4-0 de readAddr activan registros de la APU
+                    uint8_t regOffset = readAddr & 0x001F;
+
+                    if (regOffset == 0x15) {
+                        uint8_t extVal = isApuRegAddr ? openBus.getValue() : this->read(readAddr);
+                        openBus.update(extVal);
+                        uint8_t statusByte = this->read(0x4015);
+                        dmaData = (statusByte & 0xDF) | (extVal & 0x20);
+                    } else if (regOffset == 0x16 || regOffset == 0x17) {
+                        uint8_t extVal = isApuRegAddr ? openBus.getValue() : this->read(readAddr);
+                        openBus.update(extVal);
+                        uint8_t joyByte = this->read(0x4000 | regOffset);
+                        // Si readAddr apunta a memoria activa (RAM $0000-$1FFF, PPU $2000-$3FFF o ROM >= $8000),
+                        // ocurre un conflicto de bus (AND) entre extVal y joyByte:
+                        bool isDrivenMemory = (readAddr < 0x4000) || (readAddr >= 0x8000);
+                        dmaData = isDrivenMemory ? (extVal & joyByte) : joyByte;
+                        openBus.update(dmaData);
                     } else {
-                        dmaData = this->read(readAddr);
+                        dmaData = isApuRegAddr ? openBus.getValue() : this->read(readAddr);
                     }
                 }
             } else {
@@ -337,7 +341,7 @@ namespace NES
 
     uint8_t Bus::read(uint16_t addr)
     {
-        if(dmcState != DMCDMAState::Get)
+        if(!dmaActive && dmcState == DMCDMAState::Idle)
         {
             cpuLastReadAddress = addr;
         }
@@ -386,13 +390,6 @@ namespace NES
                 openBus.update(value);
                 return value;
             }
-        }
-
-        if(addr == 0x4016 || addr == 0x4017)
-        {
-            uint8_t finalVal = openBus.getValue() & 0xE0;
-            openBus.update(finalVal);
-            return finalVal;
         }
 
         return openBus.getValue();
