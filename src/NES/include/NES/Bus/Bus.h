@@ -69,10 +69,10 @@ namespace NES
                 std::function<bool()> isRequested;
                 std::function<uint16_t()> getAddress;
                 std::function<void(uint8_t)> deliverSample;
-                std::function<void()> onFrameConflict; // Para limpiar el Frame IRQ si lee $xx15
+                std::function<void()> onFrameConflict;
                 std::function<uint16_t()> getCpuAddress;
-                std::function<bool()> isAbortedRequested;
-                std::function<void()> clearAbortedRequest;
+                std::function<uint16_t()> getBytesRemaining;
+                std::function<void()> cancelRequest;
             };
 
             void setDMCHandler(DMCHandler handler) { dmcHandler = handler; }
@@ -102,8 +102,8 @@ namespace NES
             uint16_t dmcReadAddress = 0;
 
             uint16_t normalizeAddress(uint16_t address) const;
-            uint8_t applyReadMasks(uint16_t addr, uint8_t value)const;
-            uint8_t applyWriteMasks(uint16_t addr, uint8_t value)const;
+            uint8_t applyReadMasks(uint16_t addr, uint8_t value) const;
+            uint8_t applyWriteMasks(uint16_t addr, uint8_t value) const;
 
             bool NMILine;
             bool IRQLine;
@@ -117,7 +117,10 @@ namespace NES
             uint8_t dmaPage = 0x00;
             uint8_t dmaAddr = 0x00;
             uint8_t dmaData = 0x00;
-            uint16_t remainingDMACycles;
+            uint16_t remainingDMACycles = 0;
+
+            uint64_t lastControllerReadCycle = 0xFFFFFFFFFFFFFFFFULL;
+            uint8_t lastControllerValue = 0;
 
             uint16_t cpuLastReadAddress = 0x0000;
     };

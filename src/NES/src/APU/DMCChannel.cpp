@@ -28,8 +28,6 @@ namespace NES
         irqFlag = false;
         dmaRequested = false;
         loadDmaDelay = 0;
-        abortedDmaDelay = 0;
-        abortedDmaRequested = false;
     }
 
     void DMCChannel::setEnabled(bool enable)
@@ -37,25 +35,19 @@ namespace NES
         enabled = enable;
         if(!enabled)
         {
-            // Explicit DMA Abort: si una muestra estaba en curso y el canal se apaga
-            // justo en el ciclo de APU previo a un Reload DMA:
-            if(bytesRemaining > 0 && bitsRemaining == 1 && (timerCounter == 2 || timerCounter == 1))
+            // Explicit DMA Abort: si una muestra estaba activa y se deshabilita
+            // cuando faltan 2 o menos ciclos para el reload del timer:
+            if(bytesRemaining > 0 && bitsRemaining == 1 && timerCounter <= 2)
             {
-                abortedDmaDelay = timerCounter;
+                dmaRequested = true; // El 2A03 ya agendó el halt internamente
             }
-
-            // Si había un Load DMA agendado por un setEnabled previo:
-            if(loadDmaDelay > 0)
+            else
             {
-                if(loadDmaDelay <= 2)
-                {
-                    abortedDmaDelay = loadDmaDelay;
-                }
-                loadDmaDelay = 0;
+                dmaRequested = false;
             }
 
             bytesRemaining = 0;
-            dmaRequested = false;
+            loadDmaDelay = 0;
         }
         else
         {
@@ -65,9 +57,7 @@ namespace NES
 
                 if(bufferEmpty && bytesRemaining > 0)
                 {
-                    // Load DMA se agenda para el ciclo GET del 2do ciclo de APU tras escribir $4015:
-                    // - Si ocurrió en ciclo par (GET): 4 ciclos de CPU
-                    // - Si ocurrió en ciclo impar (PUT): 3 ciclos de CPU
+                    // Load DMA: +4 ciclos si es ciclo par (GET), +3 si es impar (PUT)
                     loadDmaDelay = ((busReference.totalCpuCycles & 1) == 0) ? 4 : 3;
                 }
             }
@@ -125,15 +115,6 @@ namespace NES
             }
         }
 
-        if(abortedDmaDelay > 0)
-        {
-            abortedDmaDelay--;
-            if(abortedDmaDelay == 0)
-            {
-                abortedDmaRequested = true;
-            }
-        }
-
         if(timerCounter == 0)
         {
             timerReload = NTSC_RATE_TABLE[rateIndex] - 1;
@@ -167,7 +148,7 @@ namespace NES
                     shiftRegister = sampleBuffer;
                     bufferEmpty = true;
 
-                    // Reload DMA: solicita DMA inmediatamente cuando el shift register toma la muestra
+                    // Reload DMA: solicita DMA inmediatamente al vaciar el buffer
                     if(bytesRemaining > 0)
                     {
                         dmaRequested = true;
@@ -208,11 +189,10 @@ namespace NES
                     busReference.setIRQLine(false);
                 }
 
-                // Implicit DMA Abort: una muestra de 1 byte sin loop terminó su transferencia
-                // justo en el ciclo de APU previo a donde el Reload DMA se agendaría:
-                if(bitsRemaining == 1 && (timerCounter == 2 || timerCounter == 1))
+                // Implicit DMA Abort: la muestra terminó justo en el ciclo de APU previo a un Reload DMA:
+                if(bitsRemaining == 1 && timerCounter <= 2)
                 {
-                    abortedDmaDelay = timerCounter;
+                    dmaRequested = true;
                 }
             }
         }
