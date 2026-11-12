@@ -50,7 +50,7 @@ namespace NES
     void NoiseChannel::writePeriod(uint8_t value)
     {
         modeFlag = (value & 0x80) != 0;
-        timerReload = NOISE_PERIOD_TABLE[value & 0x0F];
+        timerReload = NOISE_PERIOD_TABLE[value & 0x0F] - 1;
     }
 
     void NoiseChannel::writeLength(uint8_t value)
@@ -68,9 +68,14 @@ namespace NES
         {
             timerCounter = timerReload;
 
-            // Cálculo LFSR (Bit 0 XOR bit 1) si modeFlag = true
-            // (bit 0 XOR bit 6) si modeFlag = false
-            uint8_t feedbackBit = modeFlag ? 1 : 6;
+            // En el 2A03 real:
+            // modeFlag == true  (Bit 7 = 1, modo tonal/metálico corto): Bit 0 XOR Bit 6
+            // modeFlag == false (Bit 7 = 0, modo ruido blanco normal):  Bit 0 XOR Bit 1
+            uint8_t feedbackBit = modeFlag ? 6 : 1;
+
+            // Salvaguarda: si por un savestate viejo shiftRegister quedó en 0, re-sembrarlo en 1
+            if (shiftRegister == 0) shiftRegister = 1;
+
             uint16_t bit0 = shiftRegister & 0x0001;
             uint16_t bitFeedback = (shiftRegister >> feedbackBit) & 0x0001;
             uint16_t result = bit0 ^ bitFeedback;

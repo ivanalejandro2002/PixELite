@@ -106,7 +106,9 @@ namespace NES
 
     uint8_t TriangleChannel::output() const
     {
-        if(!enabled || lengthCounter == 0 || linearCounter == 0) return 0;
+        if (!enabled) return 0;
+        // Evitar ultrasonido / pop cuando el juego apaga el triángulo poniendo periodo < 2
+        if (timerReload < 2) return 7;
         return TRIANGLE_SEQUENCE[sequencerStep];
     }
 }

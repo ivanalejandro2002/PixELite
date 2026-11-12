@@ -61,8 +61,15 @@ void closeAudio()
 
 void runEmulationFrame(NES::NES& nes, NES::APU& apu, NES::AudioRingBuffer& ringBuffer)
 {
+    // Filtros analógicos de salida de la NES a 44100 Hz:
+    // 1) High-Pass Filter (~90 Hz) para eliminar el offset DC del DAC no lineal
+    // 2) Low-Pass Filter (~14 kHz) para suavizar el aliasing de muestreo
+    static float prevRawSample = 0.0f;
+    static float highPassOutput = 0.0f;
     static float lowPassOutput = 0.0f;
-    constexpr float ALPHA = 0.4f;
+
+    constexpr float HPF_ALPHA = 0.9873f; // ~90 Hz @ 44.1 kHz
+    constexpr float LPF_ALPHA = 0.65f;   // ~14 kHz @ 44.1 kHz
 
     while (!nes.getPPU().isFrameComplete())
     {
@@ -72,11 +79,17 @@ void runEmulationFrame(NES::NES& nes, NES::APU& apu, NES::AudioRingBuffer& ringB
         if (sampleAccumulator >= CYCLES_PER_SAMPLE)
         {
             sampleAccumulator -= CYCLES_PER_SAMPLE;
-            const float rawSample = apu.testMode
-                ? apu.getTestToneSample()
-                : apu.getAudioSample();
+            const float rawSample = static_cast<float>(
+                apu.testMode ? apu.getTestToneSample() : apu.getAudioSample()
+            );
 
-            lowPassOutput += ALPHA * (rawSample - lowPassOutput);
+            // 1. Filtro Pasa-Altas (centra la onda en 0.0 y evita saturación DC)
+            highPassOutput = HPF_ALPHA * (highPassOutput + rawSample - prevRawSample);
+            prevRawSample = rawSample;
+
+            // 2. Filtro Pasa-Bajas suave
+            lowPassOutput += LPF_ALPHA * (highPassOutput - lowPassOutput);
+
             ringBuffer.push(lowPassOutput);
         }
     }
