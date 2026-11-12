@@ -9,8 +9,13 @@ add_compile_definitions(PROJECT_ROOT_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
+# Soporte UTF-8 en MSVC (Windows) para acentos y caracteres en español
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 # =========================================
-# SDL3 Optional Linux/X11 Dependencies
+# SDL3 Static Configuration & X11/Wayland
 # =========================================
 
 set(SDL_X11_XSCRNSAVER OFF CACHE BOOL "" FORCE)
@@ -19,9 +24,10 @@ set(SDL_X11_XFIXES OFF CACHE BOOL "" FORCE)
 set(SDL_X11_XCURSOR OFF CACHE BOOL "" FORCE)
 set(SDL_X11_XSHAPE OFF CACHE BOOL "" FORCE)
 
-# =========================================
-# SDL3
-# =========================================
+# Forzar SDL3 estático ANTES de add_subdirectory para no depender de libSDL3.so.0 ni SDL3.dll
+set(SDL_SHARED OFF CACHE BOOL "Disable SDL3 shared library" FORCE)
+set(SDL_STATIC ON CACHE BOOL "Enable SDL3 static library" FORCE)
+set(SDL_TEST_LIBRARY OFF CACHE BOOL "Disable SDL3 test library" FORCE)
 
 add_subdirectory(external/SDL)
 
@@ -69,7 +75,7 @@ target_include_directories(imgui PUBLIC
 # =========================================
 
 target_link_libraries(imgui PUBLIC
-    SDL3::SDL3
+    SDL3::SDL3-static
     glad
     OpenGL::GL
 )
@@ -78,9 +84,7 @@ target_link_libraries(imgui PUBLIC
 # Internal Modules
 # =========================================
 
-# add_subdirectory(src/Módulo)
 add_subdirectory(src/NES)
-
 
 # =========================================
 # Main Executable
@@ -96,17 +100,14 @@ add_executable(TT
 # =========================================
 
 target_link_libraries(TT PRIVATE
-    SDL3::SDL3
+    SDL3::SDL3-static
     imgui
     glad
     OpenGL::GL
     NES
 )
 
-# =========================================
-# Linux pthread fix
-# =========================================
-
 if(UNIX AND NOT APPLE)
+    target_link_options(TT PRIVATE -static-libgcc -static-libstdc++)
     target_link_libraries(TT PRIVATE pthread dl)
 endif()
