@@ -1,0 +1,71 @@
+name: Build & Release PixELite
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config \
+            libx11-dev libxext-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev libxss-dev libwayland-dev \
+            wayland-protocols libegl1-mesa-dev libgl1-mesa-dev \
+            libasound2-dev libpulse-dev libpipewire-0.3-dev
+
+      - name: Configure & Build
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j$(nproc)
+
+      - name: Package Linux Release
+        run: |
+          mkdir -p release_linux
+          cp build/TT release_linux/PixELite
+          cp LICENSE README.md release_linux/
+          tar -czvf PixELite-Linux-x86_64.tar.gz -C release_linux .
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: PixELite-Linux-x86_64.tar.gz
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure & Build (MSVC)
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+
+      - name: Package Windows Release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release_windows
+          Copy-Item "build\Release\TT.exe" "release_windows\PixELite.exe"
+          if (Test-Path "build\Release\*.dll") { Copy-Item "build\Release\*.dll" "release_windows\" }
+          Copy-Item "LICENSE", "README.md" "release_windows\"
+          Compress-Archive -Path "release_windows\*" -DestinationPath "PixELite-Windows-x64.zip"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: PixELite-Windows-x64.zip
