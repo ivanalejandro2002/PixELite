@@ -16,6 +16,10 @@ public:
         prgBankSelect = 0; // Arranca apuntando al primer banco al encender
     }
 
+    void reset() override {
+        prgBankSelect = 0;
+    }
+
     bool cpuMapRead(uint16_t addr, uint32_t& mappedAddr) override {
         if (addr >= 0x8000 && addr <= 0xBFFF) {
             // Ventana inferior conmutable (16 KB)

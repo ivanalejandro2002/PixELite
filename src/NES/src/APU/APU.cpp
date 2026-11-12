@@ -311,6 +311,24 @@ namespace NES
         }
     }
 
+    void APU::reset()
+    {
+        // En el 2A03 real, un Reset fuerza $4015 = $00 (silencia canales y apaga DMC)
+        write(0x4015, 0x00);
+
+        statusRegister = 0;
+        cpuCycleCount = 0;
+        frameStep = 0;
+        frameIrqFlag = false;
+        pulseDivider = false;
+
+        pendingFrameCounterReset = false;
+        pendingFrameCounterValue = 0;
+        frameCounterResetDelay = 0;
+
+        dmc.getBusReference().setIRQLine(true);
+    }
+
     double APU::getAudioSample()
     {
         uint8_t p1 = pulse1.output();

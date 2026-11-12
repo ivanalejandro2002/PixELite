@@ -1089,6 +1089,13 @@ namespace NES
 
         suppressVBlankFlag = false;
         nmiDelay = 0;
+
+        currentScanlineSpriteCount = 0;
+        nextScanlineSpriteCount = 0;
+        spritePatternLowBytes.fill(0);
+        spritePatternHighBytes.fill(0);
+        nextSpritePatternLowBytes.fill(0);
+        nextSpritePatternHighBytes.fill(0);
     }
 
     bool PPU2C02::isFrameComplete() const {return frameComplete;}

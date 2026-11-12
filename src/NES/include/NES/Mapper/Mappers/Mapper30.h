@@ -23,6 +23,10 @@ namespace NES {
                 currentMirroring = Mirroring::SingleScreenLower;
             }
 
+            void reset() override {
+                prgBankSelect = 0;
+            }
+
             bool cpuMapRead(uint16_t addr, uint32_t& mappedAddr) override {
                 if (addr >= 0x8000 && addr <= 0xBFFF) {
                     // Ventana inferior conmutable de 16 KB

@@ -129,6 +129,20 @@ public:
         updateOffsets();
     }
 
+    void reset() override {
+        targetRegister = 0x00;
+        prgBankMode = false;
+        chrInversion = false;
+        registers = {0, 2, 4, 5, 6, 7, 0, 1};
+        irqLatch = 0;
+        irqCounter = 0;
+        irqEnabled = false;
+        irqReloadPending = false;
+        irqActive = false;
+        a12LowCount = 0;
+        updateOffsets();
+    }
+
     bool cpuMapRead(uint16_t addr, uint32_t& mappedAddr) override {
         if (addr >= 0x8000 && addr <= 0xFFFF) {
             uint8_t window = (addr - 0x8000) / 0x2000; // 4 ventanas de 8KB (0..3)

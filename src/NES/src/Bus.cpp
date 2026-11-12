@@ -56,11 +56,29 @@ namespace NES
 
     void Bus::resetBus()
     {
-        NMILine = IRQLine = 1;
-        NMIActivation = 0;
+        NMILine = true;
+        IRQLine = true;
+        NMIActivation = false;
 
         DMAInProgress = false;
         remainingDMACycles = 0;
+
+        dmaActive = false;
+        dmaDummy = true;
+        dmaPage = 0;
+        dmaAddr = 0;
+        dmaData = 0;
+        oamNeedRealign = false;
+
+        dmcState = DMCDMAState::Idle;
+        dmcReadAddress = 0;
+        cpuLastReadAddress = 0;
+
+        totalCpuCycles = 0;
+        lastControllerReadCycle[0] = 0;
+        lastControllerReadCycle[1] = 0;
+        lastControllerValue[0] = 0;
+        lastControllerValue[1] = 0;
     }
 
     OpenBus& Bus::getOpenBus()

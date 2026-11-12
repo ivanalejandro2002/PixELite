@@ -17,6 +17,8 @@ namespace NES
 
             virtual ~Mapper() = default;
 
+            virtual void reset() {}
+
             virtual bool cpuMapRead(uint16_t addr, uint32_t& mappedAddr) = 0;
             virtual bool cpuMapWrite(uint16_t addr, uint32_t& mappedAddr, uint8_t data) = 0;
 

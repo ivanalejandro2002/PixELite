@@ -74,6 +74,16 @@ public:
         updateOffsets();
     }
 
+    void reset() override {
+        shiftRegister = 0x10;
+        shiftCount = 0;
+        control = 0x0C; // Fuerza PRG Mode 3 ($C000-$FFFF fijo al último banco)
+        chrBank0 = 0;
+        chrBank1 = 1;
+        prgBank = 0;
+        updateOffsets();
+    }
+
     bool hasDynamicMirroring() const override { return true; }
 
     bool cpuMapRead(uint16_t addr, uint32_t& mappedAddr) override {

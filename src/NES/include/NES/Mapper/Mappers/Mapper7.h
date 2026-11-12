@@ -17,6 +17,11 @@ public:
         currentMirroring = Mirroring::SingleScreenLower;
     }
 
+    void reset() override {
+        prgBankOffset = 0;
+        currentMirroring = Mirroring::SingleScreenLower;
+    }
+
     bool cpuMapRead(uint16_t addr, uint32_t& mappedAddr) override {
         if (addr >= 0x8000 && addr <= 0xFFFF) {
             // Ventana única de 32 KB ($8000 - $FFFF)
