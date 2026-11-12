@@ -30,6 +30,14 @@ namespace NES::CPU
             uint16_t getCurrentAddress() const {return address;}
             uint16_t getCurrentBusAddress() const;
 
+            uint8_t getA() const { return A; }
+            uint8_t getX() const { return X; }
+            uint8_t getY() const { return Y; }
+            uint16_t getPC() const { return PC; }
+            uint8_t getSP() const { return S; }
+            uint8_t getStatusByte() const { return status.getByte(); }
+            StatusRegister getStatus() const {return status;}
+
             void mock();
 
             bool isJammed;

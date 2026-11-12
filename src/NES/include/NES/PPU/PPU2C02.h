@@ -65,6 +65,10 @@ namespace NES
                 void debugGenerateTestPattern();
                 void debugGenerateBackground();
 
+                std::array<uint8_t, 3> getMasterPaletteRGB(uint8_t colorIndex) const {
+                    return nesPalette[colorIndex & 0x3F];
+                }
+
                 void clock();
 
                 uint8_t readVRAM(uint16_t addr);

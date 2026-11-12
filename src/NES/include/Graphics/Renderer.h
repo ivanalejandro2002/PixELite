@@ -15,7 +15,13 @@ namespace TT::Graphics
 
             bool initialize(SDL_Window* window);
 
-            void renderFrame(const NES::Graphics::FrameBuffer& frameBuffer);
+            void renderFrame(
+                const NES::Graphics::FrameBuffer& frameBuffer,
+                int availX = 0,
+                int availY = 0,
+                int availWidth = -1,
+                int availHeight = -1
+            );
 
             void destroy();
 
