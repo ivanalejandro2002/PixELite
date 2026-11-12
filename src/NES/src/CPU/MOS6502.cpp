@@ -179,7 +179,8 @@ namespace NES::CPU
     void MOS6502::reset()
     {
         cycles = 0;
-        isJammed = 0;
+        isJammed = false;
+        currentInstruction.reset();
         pendingIUpdates = 0;
         iUpdate = 0;
         pendingIRQ = pendingNMI = 0;

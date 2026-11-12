@@ -55,6 +55,10 @@ namespace NES
     void NES::reset()
     {
         masterClock = 0;
+        mainBus.resetBus();
+        ppu.reset();
+        apu.reset();
+        cartridge.resetMapper();
         cpu.reset();
     }
 

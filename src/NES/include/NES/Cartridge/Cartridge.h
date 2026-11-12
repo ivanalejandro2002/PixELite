@@ -40,6 +40,8 @@ namespace NES{
     {
         public:
             Cartridge();
+            
+            void resetMapper() { if (mapper) mapper->reset(); }
 
             bool handlesRead(uint16_t addr) const override;
             bool handlesWrite(uint16_t addr) const override;

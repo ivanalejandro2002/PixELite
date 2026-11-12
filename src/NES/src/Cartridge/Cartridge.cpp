@@ -87,6 +87,13 @@ namespace NES
             return false;
         }
 
+        // Limpiar por completo el estado de cualquier ROM cargada previamente
+        prgRom.clear();
+        chrRom.clear();
+        trainer.clear();
+        prgRam.clear();
+        mapper.reset();
+
         RomHeader header;
         file.read(reinterpret_cast<char*>(&header), sizeof(RomHeader));
 

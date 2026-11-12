@@ -26,6 +26,7 @@ namespace NES
             void write(uint16_t addr, uint8_t value) override;
 
             void clock();
+            void reset();
 
             double getAudioSample();
 
