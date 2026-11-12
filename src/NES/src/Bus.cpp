@@ -15,7 +15,7 @@ namespace NES
         lastValue = static_cast<uint8_t>(distrib(gen));
     }
 
-    uint8_t OpenBus::getValue()
+    uint8_t OpenBus::getValue() const
     {
         return lastValue;
     }
@@ -434,5 +434,66 @@ namespace NES
                 return;
             }
         }
+    }
+
+    void Bus::saveState(std::ostream& out) const
+    {
+        SaveStateStream::writeVal(out, totalCpuCycles);
+
+        uint8_t openBusVal = openBus.getValue(); // Ajusta si tu getter en OpenBus se llama distinto (ej. read() o get())
+        SaveStateStream::writeVal(out, openBusVal);
+
+        SaveStateStream::writeVal(out, dmcState);
+        SaveStateStream::writeVal(out, dmcReadAddress);
+
+        SaveStateStream::writeVal(out, NMILine);
+        SaveStateStream::writeVal(out, IRQLine);
+        SaveStateStream::writeVal(out, NMIActivation);
+
+        SaveStateStream::writeVal(out, DMAInProgress);
+        SaveStateStream::writeVal(out, dmaActive);
+        SaveStateStream::writeVal(out, dmaDummy);
+        SaveStateStream::writeVal(out, oamNeedRealign);
+        SaveStateStream::writeVal(out, dmaPage);
+        SaveStateStream::writeVal(out, dmaAddr);
+        SaveStateStream::writeVal(out, dmaData);
+        SaveStateStream::writeVal(out, remainingDMACycles);
+
+        SaveStateStream::writeVal(out, lastControllerReadCycle[0]);
+        SaveStateStream::writeVal(out, lastControllerReadCycle[1]);
+        SaveStateStream::writeVal(out, lastControllerValue[0]);
+        SaveStateStream::writeVal(out, lastControllerValue[1]);
+        SaveStateStream::writeVal(out, cpuLastReadAddress);
+    }
+
+    void Bus::loadState(std::istream& in)
+    {
+        SaveStateStream::readVal(in, totalCpuCycles);
+
+        uint8_t openBusVal = 0;
+        SaveStateStream::readVal(in, openBusVal);
+        openBus.update(openBusVal); // Ajusta al nombre de tu setter en OpenBus.h
+
+        SaveStateStream::readVal(in, dmcState);
+        SaveStateStream::readVal(in, dmcReadAddress);
+
+        SaveStateStream::readVal(in, NMILine);
+        SaveStateStream::readVal(in, IRQLine);
+        SaveStateStream::readVal(in, NMIActivation);
+
+        SaveStateStream::readVal(in, DMAInProgress);
+        SaveStateStream::readVal(in, dmaActive);
+        SaveStateStream::readVal(in, dmaDummy);
+        SaveStateStream::readVal(in, oamNeedRealign);
+        SaveStateStream::readVal(in, dmaPage);
+        SaveStateStream::readVal(in, dmaAddr);
+        SaveStateStream::readVal(in, dmaData);
+        SaveStateStream::readVal(in, remainingDMACycles);
+
+        SaveStateStream::readVal(in, lastControllerReadCycle[0]);
+        SaveStateStream::readVal(in, lastControllerReadCycle[1]);
+        SaveStateStream::readVal(in, lastControllerValue[0]);
+        SaveStateStream::readVal(in, lastControllerValue[1]);
+        SaveStateStream::readVal(in, cpuLastReadAddress);
     }
 }

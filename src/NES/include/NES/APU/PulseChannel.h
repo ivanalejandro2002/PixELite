@@ -24,6 +24,10 @@ namespace NES
             void setEnabled(bool enable);
             bool isEnabled() const;
 
+            uint8_t sweepPeriod = 0;
+            uint16_t calculateTargetPeriod() const;
+            bool isSweepMuting() const;
+
         private:
             bool isPulse1;
             bool enabled;

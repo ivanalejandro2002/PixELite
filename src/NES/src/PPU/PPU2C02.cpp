@@ -1101,6 +1101,127 @@ namespace NES
     bool PPU2C02::isFrameComplete() const {return frameComplete;}
     void PPU2C02::clearFrameComplete() {frameComplete = false;}
 
+    void PPU2C02::saveState(std::ostream& out) const
+    {
+        // CIRAM (Nametables) y PaletteRAM (32 bytes en $3F00-$3F1F)
+        ciram.saveState(out);
+        for (uint16_t addr = 0x3F00; addr <= 0x3F1F; ++addr) {
+            uint8_t palVal = const_cast<PaletteRAM&>(palette).read(addr);
+            SaveStateStream::writeVal(out, palVal);
+        }
+
+        // Registros principales y OAM (256 bytes)
+        SaveStateStream::writeVal(out, PPUCTRL);
+        SaveStateStream::writeVal(out, PPUMASK);
+        SaveStateStream::writeVal(out, PPUSTATUS);
+        SaveStateStream::writeVal(out, OAMADDR);
+        SaveStateStream::writeArray(out, OAM);
+
+        // Registros Loopy y Buffers de lectura / OpenBus PPU
+        SaveStateStream::writeVal(out, v);
+        SaveStateStream::writeVal(out, t);
+        SaveStateStream::writeVal(out, fineX);
+        SaveStateStream::writeVal(out, writeToggle);
+        SaveStateStream::writeVal(out, readBuffer);
+        SaveStateStream::writeVal(out, ioLatch);
+        SaveStateStream::writeVal(out, openBusTimer);
+
+        // Shifters y latches de Background
+        SaveStateStream::writeVal(out, bgPatternShiftLow);
+        SaveStateStream::writeVal(out, bgPatternShiftHigh);
+        SaveStateStream::writeVal(out, bgAttributeShiftLow);
+        SaveStateStream::writeVal(out, bgAttributeShiftHigh);
+        SaveStateStream::writeVal(out, nextTileID);
+        SaveStateStream::writeVal(out, nextTileAttribute);
+        SaveStateStream::writeVal(out, nextTileLow);
+        SaveStateStream::writeVal(out, nextTileHigh);
+
+        // Timings de Scanline, Ciclo y evaluación de Sprites
+        SaveStateStream::writeVal(out, scanline);
+        SaveStateStream::writeVal(out, cycle);
+        SaveStateStream::writeVal(out, frameComplete);
+
+        for (int i = 0; i < 8; ++i) {
+            SaveStateStream::writeVal(out, currentScanlineSprites[i]);
+            SaveStateStream::writeVal(out, nextScanlineSprites[i]);
+        }
+        SaveStateStream::writeArray(out, spritePatternLowBytes);
+        SaveStateStream::writeArray(out, spritePatternHighBytes);
+        SaveStateStream::writeArray(out, nextSpritePatternLowBytes);
+        SaveStateStream::writeArray(out, nextSpritePatternHighBytes);
+
+        SaveStateStream::writeVal(out, currentScanlineSpriteCount);
+        SaveStateStream::writeVal(out, nextScanlineSpriteCount);
+        SaveStateStream::writeVal(out, spriteEvaluationIndex);
+        SaveStateStream::writeVal(out, oddCycle);
+        SaveStateStream::writeVal(out, oddFrame);
+        SaveStateStream::writeVal(out, oamM);
+        SaveStateStream::writeVal(out, suppressVBlankFlag);
+        SaveStateStream::writeVal(out, nmiDelay);
+
+        // Guardar el FrameBuffer actual (256x240 RGBA) para que al cargar en Pausa
+        // la imagen de OpenGL se actualice instantáneamente:
+        SaveStateStream::writeVal(out, frameBuffer);
+    }
+
+    void PPU2C02::loadState(std::istream& in)
+    {
+        ciram.loadState(in);
+        for (uint16_t addr = 0x3F00; addr <= 0x3F1F; ++addr) {
+            uint8_t palVal = 0;
+            SaveStateStream::readVal(in, palVal);
+            palette.write(addr, palVal);
+        }
+
+        SaveStateStream::readVal(in, PPUCTRL);
+        SaveStateStream::readVal(in, PPUMASK);
+        SaveStateStream::readVal(in, PPUSTATUS);
+        SaveStateStream::readVal(in, OAMADDR);
+        SaveStateStream::readArray(in, OAM);
+
+        SaveStateStream::readVal(in, v);
+        SaveStateStream::readVal(in, t);
+        SaveStateStream::readVal(in, fineX);
+        SaveStateStream::readVal(in, writeToggle);
+        SaveStateStream::readVal(in, readBuffer);
+        SaveStateStream::readVal(in, ioLatch);
+        SaveStateStream::readVal(in, openBusTimer);
+
+        SaveStateStream::readVal(in, bgPatternShiftLow);
+        SaveStateStream::readVal(in, bgPatternShiftHigh);
+        SaveStateStream::readVal(in, bgAttributeShiftLow);
+        SaveStateStream::readVal(in, bgAttributeShiftHigh);
+        SaveStateStream::readVal(in, nextTileID);
+        SaveStateStream::readVal(in, nextTileAttribute);
+        SaveStateStream::readVal(in, nextTileLow);
+        SaveStateStream::readVal(in, nextTileHigh);
+
+        SaveStateStream::readVal(in, scanline);
+        SaveStateStream::readVal(in, cycle);
+        SaveStateStream::readVal(in, frameComplete);
+
+        for (int i = 0; i < 8; ++i) {
+            SaveStateStream::readVal(in, currentScanlineSprites[i]);
+            SaveStateStream::readVal(in, nextScanlineSprites[i]);
+        }
+        SaveStateStream::readArray(in, spritePatternLowBytes);
+        SaveStateStream::readArray(in, spritePatternHighBytes);
+        SaveStateStream::readArray(in, nextSpritePatternLowBytes);
+        SaveStateStream::readArray(in, nextSpritePatternHighBytes);
+
+        SaveStateStream::readVal(in, currentScanlineSpriteCount);
+        SaveStateStream::readVal(in, nextScanlineSpriteCount);
+        SaveStateStream::readVal(in, spriteEvaluationIndex);
+        SaveStateStream::readVal(in, oddCycle);
+        SaveStateStream::readVal(in, oddFrame);
+        SaveStateStream::readVal(in, oamM);
+        SaveStateStream::readVal(in, suppressVBlankFlag);
+        SaveStateStream::readVal(in, nmiDelay);
+
+        // Restaurar el FrameBuffer en el estado exacto en que estaba la pantalla:
+        SaveStateStream::readVal(in, frameBuffer);
+    }
+
     uint8_t PPU2C02::debugPPUCTRL() const {return PPUCTRL;}
     uint8_t PPU2C02::debugPPUMASK() const {return PPUMASK;}
     uint8_t PPU2C02::debugPPUSTATUS() const {return PPUSTATUS;}

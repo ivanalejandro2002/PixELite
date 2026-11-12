@@ -6,7 +6,7 @@ namespace NES
         public:
             OpenBus();
 
-            uint8_t getValue();
+            uint8_t getValue() const;
             void update(uint8_t value);
         private:
             uint8_t lastValue;

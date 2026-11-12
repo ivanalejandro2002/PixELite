@@ -3,6 +3,7 @@
 #include <vector>
 
 #include <NES/PPU/Mirroring.h>
+#include <NES/SaveStateStream.h>
 
 namespace NES
 {
@@ -32,5 +33,8 @@ namespace NES
 
             virtual bool irqState() const { return false; }
             virtual void irqClear() {}
+
+            virtual void saveState(std::ostream& out) const { (void)out; }
+            virtual void loadState(std::istream& in) { (void)in; }
     };
 }

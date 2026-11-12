@@ -2,6 +2,7 @@
 
 #include <NES/Device.h>
 #include <NES/PPU/Mirroring.h>
+#include <NES/SaveStateStream.h>
 #include <array>
 #include <cstdint>
 
@@ -21,6 +22,16 @@ namespace NES
             void write(uint16_t addr, uint8_t value) override;
 
             void setMirroring(Mirroring mirroring);
+
+            void saveState(std::ostream& out) const {
+                SaveStateStream::writeArray(out, memory);
+                SaveStateStream::writeVal(out, mirroring);
+            }
+
+            void loadState(std::istream& in) {
+                SaveStateStream::readArray(in, memory);
+                SaveStateStream::readVal(in, mirroring);
+            }
 
         private:
             std::array<uint8_t, 2048> memory{};

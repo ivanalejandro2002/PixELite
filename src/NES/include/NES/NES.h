@@ -27,7 +27,7 @@ namespace NES
 
             void reset();
 
-            void loadROM(const std::string &filepath);
+            bool loadROM(const std::string &filepath);
 
             void mock();
             void memoryDebug();
@@ -53,6 +53,9 @@ namespace NES
 
             const Cartridge& getCartridge() const { return cartridge; }
             Cartridge& getCartridge() { return cartridge; }
+
+            bool saveStateToFile(const std::string& filepath) const;
+            bool loadStateFromFile(const std::string& filepath);
         private:
             
 

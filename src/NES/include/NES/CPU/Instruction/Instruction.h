@@ -26,6 +26,20 @@ namespace NES::CPU
             void reset();
             void insertNext(MicroOperation operation);
             void insertNextSequence(std::initializer_list<MicroOperation> operationList);
+            
+            void skipNextOperation() {
+                if (currentOperation < operations.size()) {
+                    ++currentOperation;
+                }
+            }
+
+            const std::vector<MicroOperation>& getOperationsList() const { return operations; }
+            std::size_t getCurrentOperationIndex() const { return currentOperation; }
+
+            void restoreState(const std::vector<MicroOperation>& ops, std::size_t currentIdx) {
+                operations = ops;
+                currentOperation = currentIdx;
+            }
 
             InstructionOperation getOperation() const;
             AddressingMode getAddressingMode() const;
@@ -38,7 +52,7 @@ namespace NES::CPU
             bool isCurrentOperationWrite() const;
             MicroOperation getCurrentOperationType() const;
 
-            private:
+        private:
             AddressingMode addressingMode;
             InstructionOperation operation;
             AccessType accessType;

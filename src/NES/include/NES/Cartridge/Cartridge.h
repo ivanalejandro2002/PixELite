@@ -69,6 +69,9 @@ namespace NES{
 
             bool hasPendingIRQ() const override { return mapper ? mapper->irqState() : false; }
 
+            void saveState(std::ostream& out) const;
+            void loadState(std::istream& in);
+
         private:
             std::vector<uint8_t> prgRom;
             std::vector<uint8_t> chrRom;
@@ -84,6 +87,8 @@ namespace NES{
             bool hasBattery = false;
             bool hasTrainer = false;
             bool isNes20 = false;
+
+            bool usesChrRam = false;
 
             size_t decodeRamSize(uint8_t shiftCount) const;
     };

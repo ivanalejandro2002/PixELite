@@ -48,6 +48,23 @@ namespace NES
 
     bool PulseChannel::isEnabled() const { return enabled; }
 
+    uint16_t PulseChannel::calculateTargetPeriod() const
+    {
+        uint16_t change = timerReload >> sweepShift;
+        if (sweepNegate)
+        {
+            // Pulse 1 usa complemento a 1 (-change - 1); Pulse 2 usa complemento a 2 (-change)
+            uint16_t sub = isPulse1 ? (change + 1) : change;
+            return (timerReload >= sub) ? (timerReload - sub) : 0;
+        }
+        return timerReload + change;
+    }
+
+    bool PulseChannel::isSweepMuting() const
+    {
+        return (timerReload < 8) || (calculateTargetPeriod() > 0x07FF);
+    }
+
     void PulseChannel::writeControl(uint8_t value)
     {
         dutyCycle = (value >> 6) & 0x03;
@@ -59,9 +76,9 @@ namespace NES
     void PulseChannel::writeSweep(uint8_t value)
     {
         sweepEnabled = (value & 0x80) != 0;
-        sweepDivider = ((value >> 4) & 0x07) + 1;
-        sweepNegate = (value & 0x08) != 0;
-        sweepShift = value & 0x07;
+        sweepPeriod  = (value >> 4) & 0x07;
+        sweepNegate  = (value & 0x08) != 0;
+        sweepShift   = value & 0x07;
         sweepReloadFlag = true;
     }
 
@@ -98,14 +115,13 @@ namespace NES
 
     uint8_t PulseChannel::output() const
     {
-        if(!enabled || lengthCounter == 0) return 0;
-
-        if(timerReload < 8) return 0;
+        if (!enabled || lengthCounter == 0) return 0;
+        if (isSweepMuting()) return 0;
 
         uint8_t wave = DUTY_TABLE[dutyCycle][sequencerStep];
-        if(wave == 0) return 0;
+        if (wave == 0) return 0;
 
-        return constantVolume? volumeOrEnvelopeReload : envelopeVolume;
+        return constantVolume ? volumeOrEnvelopeReload : envelopeVolume;
     }
 
     void PulseChannel::clockLengthCounter()
@@ -148,33 +164,19 @@ namespace NES
 
     void PulseChannel::clockSweep()
     {
-        // Barrido de frecuencia
-        if(sweepDivider > 0)
+        if (sweepDivider == 0 && sweepEnabled && sweepShift > 0 && !isSweepMuting())
         {
-            sweepDivider--;
+            timerReload = calculateTargetPeriod();
+        }
+
+        if (sweepDivider == 0 || sweepReloadFlag)
+        {
+            sweepDivider = sweepPeriod;
+            sweepReloadFlag = false;
         }
         else
         {
-            sweepDivider = ((sweepDivider >> 4) & 0x07) + 1;
-            if(sweepEnabled && sweepShift > 0 && timerReload >= 8)
-            {
-                uint16_t change = timerReload >> sweepShift;
-                if(sweepNegate)
-                {
-                    // Pulse1 tiene un complemento a 1 implícito
-                    timerReload -= change;
-                }
-                else
-                {
-                    timerReload += change;
-                }
-            }
-        }
-
-        if(sweepReloadFlag)
-        {
-            sweepReloadFlag = false;
-            sweepDivider = ((sweepDivider >> 4) & 0x07) + 1;
+            sweepDivider--;
         }
     }
 }
