@@ -48,6 +48,7 @@ namespace NES::GUI {
         // Buffers RGBA (128x128 píxeles = 65536 bytes cada una) para Pattern Tables 0 y 1
         std::array<uint8_t, 128 * 128 * 4> patternTable0{};
         std::array<uint8_t, 128 * 128 * 4> patternTable1{};
+        std::array<std::array<uint8_t, 3>, 4> activePaletteColors{};
         bool patternTablesUpdated = false;
     };
 
@@ -109,6 +110,7 @@ namespace NES::GUI {
         std::atomic<bool> cmdTogglePause{false};
         std::atomic<bool> cmdStepFrame{false};
         std::atomic<float> emulationFps{0.0f};
+        std::atomic<int> selectedPatternPalette{0};
 
         void initOpenGLResources() {
             glGenTextures(2, patternTex);
@@ -589,8 +591,8 @@ namespace NES::GUI {
                     glBindTexture(GL_TEXTURE_2D, 0);
                 }
 
-                ImGui::SetNextWindowSize(ImVec2(540.0f, 310.0f), ImGuiCond_FirstUseEver);
-                ImGui::SetNextWindowSizeConstraints(ImVec2(220.0f, 140.0f), ImVec2(FLT_MAX, FLT_MAX));
+                ImGui::SetNextWindowSize(ImVec2(560.0f, 360.0f), ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowSizeConstraints(ImVec2(240.0f, 180.0f), ImVec2(FLT_MAX, FLT_MAX));
 
                 if (ImGui::Begin("Pattern Tables", &showPatternTables)) {
                     ImGui::SetWindowFontScale(1.0f);
@@ -598,18 +600,19 @@ namespace NES::GUI {
                     ImVec2 avail = ImGui::GetContentRegionAvail();
                     float spacing = ImGui::GetStyle().ItemSpacing.x;
 
-                    // Primero calculamos el tamaño exacto de cada imagen cuadrada (tablePx)
+                    // Reservamos espacio abajo para el selector de paleta (~2 líneas de alto)
+                    float bottomControlsHeight = ImGui::GetFrameHeightWithSpacing() * 1.4f;
+
                     float maxByWidth  = (avail.x - spacing) * 0.5f;
-                    float maxByHeight = avail.y - 26.0f;
+                    float maxByHeight = avail.y - bottomControlsHeight - 28.0f;
                     float tablePx = std::max(48.0f, std::min(maxByWidth, maxByHeight));
 
-                    // Escalamos la etiqueta para que NUNCA sea más ancha que tablePx
                     float labelBaseW = ImGui::CalcTextSize("Pattern Table 0 ($0000)").x;
                     float labelScale = std::clamp((tablePx * 0.95f) / labelBaseW, 0.45f, 1.15f);
                     ImGui::SetWindowFontScale(labelScale);
 
-                    // Recalcular tablePx con la altura real que quedó en la etiqueta
-                    maxByHeight = avail.y - ImGui::GetTextLineHeightWithSpacing() - 4.0f;
+                    // Ajustar tablePx descontando la etiqueta superior y la barra inferior del selector
+                    maxByHeight = avail.y - ImGui::GetTextLineHeightWithSpacing() - bottomControlsHeight - 6.0f;
                     tablePx = std::max(48.0f, std::min(maxByWidth, maxByHeight));
 
                     ImGui::BeginGroup();
@@ -623,6 +626,41 @@ namespace NES::GUI {
                     ImGui::Text("Pattern Table 1 ($1000)");
                     ImGui::Image((ImTextureID)(intptr_t)patternTex[1], ImVec2(tablePx, tablePx));
                     ImGui::EndGroup();
+
+                    // --- SELECTOR DE PALETA ABAJO DE LAS PATTERN TABLES ---
+                    ImGui::Spacing();
+                    ImGui::Separator();
+
+                    static const char* paletteNames[] = {
+                        "Escala de Grises (Default)",
+                        "Paleta 0 - Fondo ($3F00)",
+                        "Paleta 1 - Fondo ($3F04)",
+                        "Paleta 2 - Fondo ($3F08)",
+                        "Paleta 3 - Fondo ($3F0C)",
+                        "Paleta 4 - Sprite ($3F10)",
+                        "Paleta 5 - Sprite ($3F14)",
+                        "Paleta 6 - Sprite ($3F18)",
+                        "Paleta 7 - Sprite ($3F1C)"
+                    };
+
+                    int palIdx = selectedPatternPalette.load(std::memory_order_relaxed);
+                    ImGui::Text("Paleta:");
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(tablePx * 1.15f);
+                    if (ImGui::Combo("##PaletteSelect", &palIdx, paletteNames, IM_ARRAYSIZE(paletteNames))) {
+                        selectedPatternPalette.store(palIdx, std::memory_order_relaxed);
+                    }
+
+                    // Dibujar vista previa de los 4 colores de la paleta seleccionada a la derecha
+                    ImGui::SameLine();
+                    float swatchSize = ImGui::GetFrameHeight();
+                    for (int c = 0; c < 4; ++c) {
+                        const auto& rgb = snap.activePaletteColors[c];
+                        ImVec4 col(rgb[0] / 255.0f, rgb[1] / 255.0f, rgb[2] / 255.0f, 1.0f);
+                        std::string btnId = "##swatch" + std::to_string(c);
+                        ImGui::ColorButton(btnId.c_str(), col, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop, ImVec2(swatchSize, swatchSize));
+                        if (c < 3) ImGui::SameLine(0.0f, 4.0f);
+                    }
 
                     ImGui::SetWindowFontScale(1.0f);
                 }

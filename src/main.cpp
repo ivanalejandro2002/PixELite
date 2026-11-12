@@ -84,14 +84,32 @@ void runEmulationFrame(NES::NES& nes, NES::APU& apu, NES::AudioRingBuffer& ringB
 }
 
 // Genera las imágenes 128x128 de las dos Pattern Tables ($0000 y $1000) solo cuando la ventana está abierta
-void extractPatternTables(NES::NES& nes, NES::GUI::DebugSnapshot& snap)
+void extractPatternTables(NES::NES& nes, NES::GUI::DebugSnapshot& snap, int paletteOption)
 {
-    static constexpr uint8_t grayPalette[4][3] = {
+    std::array<std::array<uint8_t, 3>, 4> activePalette = {{
         { 15,  15,  25},
         { 85,  95, 115},
         {165, 175, 195},
         {245, 245, 255}
-    };
+    }};
+
+    // Si paletteOption > 0, leemos la subpaleta real desde $3F00 - $3F1F en la PPU:
+    // 1..4 -> Paletas de Fondo (0..3) | 5..8 -> Paletas de Sprite (4..7)
+    if (paletteOption >= 1 && paletteOption <= 8) {
+        uint16_t palIndex = static_cast<uint16_t>(paletteOption - 1);
+        uint16_t basePalAddr = 0x3F00 + (palIndex * 4);
+
+        // El color 0 siempre es el color de fondo universal en $3F00
+        uint8_t universalBg = nes.getPPU().readVRAM(0x3F00) & 0x3F;
+        activePalette[0] = nes.getPPU().getMasterPaletteRGB(universalBg);
+
+        for (int c = 1; c < 4; ++c) {
+            uint8_t nesColorIdx = nes.getPPU().readVRAM(basePalAddr + c) & 0x3F;
+            activePalette[c] = nes.getPPU().getMasterPaletteRGB(nesColorIdx);
+        }
+    }
+
+    snap.activePaletteColors = activePalette;
 
     auto decodeTable = [&](uint16_t baseAddr, std::array<uint8_t, 128 * 128 * 4>& outBuf) {
         for (int tileY = 0; tileY < 16; ++tileY) {
@@ -106,9 +124,9 @@ void extractPatternTables(NES::NES& nes, NES::GUI::DebugSnapshot& snap)
                         int px = tileX * 8 + col;
                         int py = tileY * 8 + row;
                         size_t idx = (py * 128 + px) * 4;
-                        outBuf[idx + 0] = grayPalette[pixel][0];
-                        outBuf[idx + 1] = grayPalette[pixel][1];
-                        outBuf[idx + 2] = grayPalette[pixel][2];
+                        outBuf[idx + 0] = activePalette[pixel][0];
+                        outBuf[idx + 1] = activePalette[pixel][1];
+                        outBuf[idx + 2] = activePalette[pixel][2];
                         outBuf[idx + 3] = 255;
                     }
                 }
@@ -305,6 +323,10 @@ int main()
 
             // Si no está en ejecución NI se pidió avanzar un frame, dormimos brevemente
             if (stateNow != NES::GUI::EmulationState::Running && !stepOneFrame) {
+                if (gui.showPatternTables) {
+                    std::lock_guard<std::mutex> lock(frameMutex);
+                    extractPatternTables(nes, sharedDebugSnapshot, gui.selectedPatternPalette.load(std::memory_order_relaxed));
+                }
                 gui.emulationFps = 0.0f;
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 nextFrameTime = Clock::now();
@@ -388,7 +410,7 @@ int main()
                 }
 
                 if (gui.showPatternTables) {
-                    extractPatternTables(nes, sharedDebugSnapshot);
+                    extractPatternTables(nes, sharedDebugSnapshot, gui.selectedPatternPalette.load(std::memory_order_relaxed));
                 } else {
                     sharedDebugSnapshot.patternTablesUpdated = false;
                 }
