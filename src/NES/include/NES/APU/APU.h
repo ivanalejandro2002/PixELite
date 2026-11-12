@@ -5,6 +5,7 @@
 #include <NES/APU/NoiseChannel.h>
 #include <NES/APU/DMCChannel.h>
 #include <NES/APU/AudioRingBuffer.h>
+#include <NES/SaveStateStream.h>
 
 #include <NES/Bus/Bus.h>
 
@@ -45,6 +46,9 @@ namespace NES
                     dmc.getBusReference().setIRQLine(true);
                 }
             }
+
+            void saveState(std::ostream& out) const;
+            void loadState(std::istream& in);
 
         private:
             PulseChannel pulse1{true};

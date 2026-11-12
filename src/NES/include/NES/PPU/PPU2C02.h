@@ -7,6 +7,7 @@
 #include <NES/Cartridge/CHRROM.h>
 #include <NES/Cartridge/Cartridge.h>
 #include <Graphics/FrameBuffer.h>
+#include <NES/SaveStateStream.h>
 
 #include <array>
 #include <cstdint>
@@ -101,6 +102,9 @@ namespace NES
 
                 bool isFrameComplete() const;
                 void clearFrameComplete();
+
+                void saveState(std::ostream& out) const;
+                void loadState(std::istream& in);
 
                 uint8_t debugPPUCTRL() const;
                 uint8_t debugPPUMASK() const;

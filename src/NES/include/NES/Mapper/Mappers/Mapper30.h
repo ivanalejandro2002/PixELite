@@ -88,6 +88,17 @@ namespace NES {
             Mirroring getMapperMirroring() const override {
                 return currentMirroring;
             }
+
+            void saveState(std::ostream& out) const override {
+                SaveStateStream::writeVal(out, prgBankSelect);
+                SaveStateStream::writeVal(out, chrBankSelect);
+                SaveStateStream::writeVal(out, currentMirroring);
+            }
+            void loadState(std::istream& in) override {
+                SaveStateStream::readVal(in, prgBankSelect);
+                SaveStateStream::readVal(in, chrBankSelect);
+                SaveStateStream::readVal(in, currentMirroring);
+            }
     };
 
 }

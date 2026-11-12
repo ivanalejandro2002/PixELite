@@ -1939,6 +1939,103 @@ namespace NES::CPU
 
     }
 
+    void MOS6502::saveState(std::ostream& out) const
+    {
+        SaveStateStream::writeVal(out, A);
+        SaveStateStream::writeVal(out, X);
+        SaveStateStream::writeVal(out, Y);
+        SaveStateStream::writeVal(out, PC);
+        SaveStateStream::writeVal(out, S);
+
+        uint8_t statusByte = status.getByte();
+        SaveStateStream::writeVal(out, statusByte);
+
+        SaveStateStream::writeVal(out, opcode);
+        SaveStateStream::writeVal(out, data);
+        SaveStateStream::writeVal(out, addressLow);
+        SaveStateStream::writeVal(out, addressHigh);
+        SaveStateStream::writeVal(out, address);
+
+        SaveStateStream::writeVal(out, pendingIUpdates);
+        SaveStateStream::writeVal(out, iUpdate);
+        SaveStateStream::writeVal(out, pendingNMI);
+        SaveStateStream::writeVal(out, pendingIRQ);
+        SaveStateStream::writeVal(out, cycles);
+        SaveStateStream::writeVal(out, isJammed);
+
+        // Variables estáticas de ciclo-exactitud en MOS6502.cpp
+        SaveStateStream::writeVal(out, nmiHijacked);
+        SaveStateStream::writeVal(out, cycleBeforeHighFetch);
+        SaveStateStream::writeVal(out, rdyLowBeforeWrite);
+
+        // Estado de currentInstruction
+        bool hasActiveInst = currentInstruction.has_value() && !currentInstruction->finished();
+        SaveStateStream::writeVal(out, hasActiveInst);
+        if (hasActiveInst) {
+            InstructionOperation opType = currentInstruction->getOperation();
+            AddressingMode addrMode = currentInstruction->getAddressingMode();
+            AccessType accType = currentInstruction->getAccessType();
+            std::size_t curOpIdx = currentInstruction->getCurrentOperationIndex();
+
+            SaveStateStream::writeVal(out, opType);
+            SaveStateStream::writeVal(out, addrMode);
+            SaveStateStream::writeVal(out, accType);
+            SaveStateStream::writeVal(out, curOpIdx);
+            SaveStateStream::writeVector(out, currentInstruction->getOperationsList());
+        }
+    }
+
+    void MOS6502::loadState(std::istream& in)
+    {
+        SaveStateStream::readVal(in, A);
+        SaveStateStream::readVal(in, X);
+        SaveStateStream::readVal(in, Y);
+        SaveStateStream::readVal(in, PC);
+        SaveStateStream::readVal(in, S);
+
+        uint8_t statusByte = 0;
+        SaveStateStream::readVal(in, statusByte);
+        status.setByte(statusByte);
+
+        SaveStateStream::readVal(in, opcode);
+        SaveStateStream::readVal(in, data);
+        SaveStateStream::readVal(in, addressLow);
+        SaveStateStream::readVal(in, addressHigh);
+        SaveStateStream::readVal(in, address);
+
+        SaveStateStream::readVal(in, pendingIUpdates);
+        SaveStateStream::readVal(in, iUpdate);
+        SaveStateStream::readVal(in, pendingNMI);
+        SaveStateStream::readVal(in, pendingIRQ);
+        SaveStateStream::readVal(in, cycles);
+        SaveStateStream::readVal(in, isJammed);
+
+        SaveStateStream::readVal(in, nmiHijacked);
+        SaveStateStream::readVal(in, cycleBeforeHighFetch);
+        SaveStateStream::readVal(in, rdyLowBeforeWrite);
+
+        bool hasActiveInst = false;
+        SaveStateStream::readVal(in, hasActiveInst);
+        if (!hasActiveInst) {
+            currentInstruction.reset();
+        } else {
+            InstructionOperation opType{};
+            AddressingMode addrMode{};
+            AccessType accType{};
+            std::size_t curOpIdx = 0;
+            std::vector<MicroOperation> opsList;
+
+            SaveStateStream::readVal(in, opType);
+            SaveStateStream::readVal(in, addrMode);
+            SaveStateStream::readVal(in, accType);
+            SaveStateStream::readVal(in, curOpIdx);
+            SaveStateStream::readVector(in, opsList);
+
+            currentInstruction = Instruction(addrMode, opType, accType, opsList);
+            currentInstruction->restoreState(opsList, curOpIdx);
+        }
+    }
+
     void MOS6502::mock()
     {
         std::cout << (int)status.getByte() << "\n";

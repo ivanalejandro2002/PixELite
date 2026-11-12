@@ -167,6 +167,25 @@ public:
             default: return Mirroring::Vertical;
         }
     }
+
+    void saveState(std::ostream& out) const override {
+        SaveStateStream::writeVal(out, shiftRegister);
+        SaveStateStream::writeVal(out, shiftCount);
+        SaveStateStream::writeVal(out, control);
+        SaveStateStream::writeVal(out, chrBank0);
+        SaveStateStream::writeVal(out, chrBank1);
+        SaveStateStream::writeVal(out, prgBank);
+    }
+
+    void loadState(std::istream& in) override {
+        SaveStateStream::readVal(in, shiftRegister);
+        SaveStateStream::readVal(in, shiftCount);
+        SaveStateStream::readVal(in, control);
+        SaveStateStream::readVal(in, chrBank0);
+        SaveStateStream::readVal(in, chrBank1);
+        SaveStateStream::readVal(in, prgBank);
+        updateOffsets();
+    }
 };
 
 }

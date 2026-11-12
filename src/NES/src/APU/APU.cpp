@@ -388,4 +388,44 @@ namespace NES
     {
         testMode = false;
     }
+
+    void APU::saveState(std::ostream& out) const
+    {
+        // Pulse1, Pulse2, Triangle y Noise son estructuras POD/trivialmente copiables
+        SaveStateStream::writeVal(out, pulse1);
+        SaveStateStream::writeVal(out, pulse2);
+        SaveStateStream::writeVal(out, triangle);
+        SaveStateStream::writeVal(out, noise);
+
+        // Estado del Frame Counter y registros generales de la APU
+        SaveStateStream::writeVal(out, statusRegister);
+        SaveStateStream::writeVal(out, cpuCycleCount);
+        SaveStateStream::writeVal(out, fiveStepMode);
+        SaveStateStream::writeVal(out, irqInhibit);
+        SaveStateStream::writeVal(out, frameStep);
+        SaveStateStream::writeVal(out, frameIrqFlag);
+        SaveStateStream::writeVal(out, pulseDivider);
+        SaveStateStream::writeVal(out, pendingFrameCounterReset);
+        SaveStateStream::writeVal(out, pendingFrameCounterValue);
+        SaveStateStream::writeVal(out, frameCounterResetDelay);
+    }
+
+    void APU::loadState(std::istream& in)
+    {
+        SaveStateStream::readVal(in, pulse1);
+        SaveStateStream::readVal(in, pulse2);
+        SaveStateStream::readVal(in, triangle);
+        SaveStateStream::readVal(in, noise);
+
+        SaveStateStream::readVal(in, statusRegister);
+        SaveStateStream::readVal(in, cpuCycleCount);
+        SaveStateStream::readVal(in, fiveStepMode);
+        SaveStateStream::readVal(in, irqInhibit);
+        SaveStateStream::readVal(in, frameStep);
+        SaveStateStream::readVal(in, frameIrqFlag);
+        SaveStateStream::readVal(in, pulseDivider);
+        SaveStateStream::readVal(in, pendingFrameCounterReset);
+        SaveStateStream::readVal(in, pendingFrameCounterValue);
+        SaveStateStream::readVal(in, frameCounterResetDelay);
+    }
 }

@@ -151,6 +151,8 @@ namespace NES
             chrSize = header.chrSizeLsb * 8192;
         }
 
+        usesChrRam = (chrSize == 0);
+
         size_t prgRamSize = 0;
         size_t prgNvRamSize = 0;
         size_t chrRamSize = 0;
@@ -281,5 +283,34 @@ namespace NES
             return mapper->getMapperMirroring();
         }
         return mirroring;
+    }
+
+    void Cartridge::saveState(std::ostream& out) const
+    {
+        if (mapper) {
+            mapper->saveState(out);
+        }
+        // Guardar PRG-RAM si existe ($6000-$7FFF)
+        SaveStateStream::writeVector(out, prgRam);
+
+        // Solo guardar CHR si es CHR-RAM modificable en tiempo de ejecución (no guarda la ROM)
+        SaveStateStream::writeVal(out, usesChrRam);
+        if (usesChrRam) {
+            SaveStateStream::writeVector(out, chrRom);
+        }
+    }
+
+    void Cartridge::loadState(std::istream& in)
+    {
+        if (mapper) {
+            mapper->loadState(in);
+        }
+        SaveStateStream::readVector(in, prgRam);
+
+        bool savedChrRam = false;
+        SaveStateStream::readVal(in, savedChrRam);
+        if (savedChrRam) {
+            SaveStateStream::readVector(in, chrRom);
+        }
     }
 }

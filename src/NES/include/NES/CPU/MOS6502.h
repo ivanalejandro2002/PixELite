@@ -6,6 +6,7 @@
 #include <NES/CPU/Instruction/Instruction.h>
 #include <NES/CPU/Instruction/InstructionTable.h>
 #include <NES/CPU/Instruction/InstructionFactory.h>
+#include <NES/SaveStateStream.h>
 #include <optional>
 
 namespace NES::CPU
@@ -37,6 +38,9 @@ namespace NES::CPU
             uint8_t getSP() const { return S; }
             uint8_t getStatusByte() const { return status.getByte(); }
             StatusRegister getStatus() const {return status;}
+
+            void saveState(std::ostream& out) const;
+            void loadState(std::istream& in);
 
             void mock();
 

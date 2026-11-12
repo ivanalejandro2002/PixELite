@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <NES/Device.h>
 #include <NES/Bus/OpenBus.h>
+#include <NES/SaveStateStream.h>
 #include <functional>
 
 namespace NES
@@ -78,6 +79,9 @@ namespace NES
             void setDMCHandler(DMCHandler handler) { dmcHandler = handler; }
             bool isDMCRunning() const { return dmcState != DMCDMAState::Idle; }
             void clockDMCDMA();
+
+            void saveState(std::ostream& out) const;
+            void loadState(std::istream& in);
 
             uint64_t totalCpuCycles = 0;
         private:

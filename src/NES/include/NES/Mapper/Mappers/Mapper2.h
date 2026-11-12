@@ -61,6 +61,13 @@ public:
         }
         return false;
     }
+
+    void saveState(std::ostream& out) const override {
+        SaveStateStream::writeVal(out, prgBankSelect);
+    }
+    void loadState(std::istream& in) override {
+        SaveStateStream::readVal(in, prgBankSelect);
+    }
 };
 
 } // namespace NES

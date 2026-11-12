@@ -104,7 +104,7 @@ namespace NES
         masterClock++;
     }
 
-    void NES::loadROM(const std::string &filepath)
+    bool NES::loadROM(const std::string &filepath)
     {
         if (cartridge.loadFromFile(filepath))
         {
@@ -116,7 +116,9 @@ namespace NES
         else
         {
             std::cerr << "[NES] Fallo crítico al intentar cargar la ROM.\n";
+            return false;
         }
+        return true;
     }
 
     void NES::mock()
@@ -424,5 +426,78 @@ namespace NES
         chr[0x100F] = 0x87;
 
         return chr;
+    }
+
+
+    bool NES::saveStateToFile(const std::string& filepath) const
+    {
+        std::ofstream out(filepath, std::ios::binary | std::ios::trunc);
+        if (!out.is_open()) {
+            std::cerr << "[NES] Error al crear archivo savestate: " << filepath << "\n";
+            return false;
+        }
+
+        // 1. Cabecera mágica (.pxsave) y Mapper ID para validar compatibilidad
+        const char magic[4] = {'P', 'X', 'S', 'V'};
+        out.write(magic, 4);
+        uint32_t version = 1;
+        uint16_t mapperId = cartridge.getMapperNumber();
+        SaveStateStream::writeVal(out, version);
+        SaveStateStream::writeVal(out, mapperId);
+
+        // 2. Reloj Maestro y Registros de Subsistemas
+        SaveStateStream::writeVal(out, masterClock);
+        cpu.saveState(out);
+        ppu.saveState(out);
+        apu.saveState(out);
+        mainBus.saveState(out);
+
+        // 3. Bancos de Memoria (RAM 2KB, CIRAM, PRG-RAM y Mapper)
+        ram.saveState(out);
+        cartridge.saveState(out);
+
+        out.close();
+        std::cout << "[NES] Savestate guardado exitosamente en: " << filepath << "\n";
+        return true;
+    }
+
+    bool NES::loadStateFromFile(const std::string& filepath)
+    {
+        std::ifstream in(filepath, std::ios::binary);
+        if (!in.is_open()) {
+            std::cerr << "[NES] No se pudo abrir el savestate: " << filepath << "\n";
+            return false;
+        }
+
+        char magic[4] = {};
+        in.read(magic, 4);
+        if (std::memcmp(magic, "PXSV", 4) != 0) {
+            std::cerr << "[NES] Archivo .pxsave inválido o corrupto.\n";
+            return false;
+        }
+
+        uint32_t version = 0;
+        uint16_t mapperId = 0;
+        SaveStateStream::readVal(in, version);
+        SaveStateStream::readVal(in, mapperId);
+
+        if (mapperId != cartridge.getMapperNumber()) {
+            std::cerr << "[NES] El savestate pertenece a otro Mapper (" << mapperId
+                    << " vs " << cartridge.getMapperNumber() << ").\n";
+            return false;
+        }
+
+        SaveStateStream::readVal(in, masterClock);
+        cpu.loadState(in);
+        ppu.loadState(in);
+        apu.loadState(in);
+        mainBus.loadState(in);
+
+        ram.loadState(in);
+        cartridge.loadState(in);
+
+        in.close();
+        std::cout << "[NES] Savestate cargado exitosamente desde: " << filepath << "\n";
+        return true;
     }
 }

@@ -139,6 +139,35 @@ void extractPatternTables(NES::NES& nes, NES::GUI::DebugSnapshot& snap, int pale
     snap.patternTablesUpdated = true;
 }
 
+void updateDebugSnapshot(NES::NES& nes, NES::GUI::DebugSnapshot& snap, bool includeRam)
+{
+    snap.ppuCtrl   = nes.getPPU().debugPPUCTRL();
+    snap.ppuMask   = nes.getPPU().debugPPUMASK();
+    snap.ppuStatus = nes.getPPU().debugPPUSTATUS();
+    snap.oamAddr   = nes.getPPU().debugOAMADDR();
+    snap.v         = nes.getPPU().debugV();
+    snap.t         = nes.getPPU().debugT();
+    snap.fineX     = nes.getPPU().debugX();
+    snap.w         = nes.getPPU().debugW();
+
+    snap.a      = nes.getCPU().getA();
+    snap.x      = nes.getCPU().getX();
+    snap.y      = nes.getCPU().getY();
+    snap.pc     = nes.getCPU().getPC();
+    snap.s      = nes.getCPU().getSP();
+    snap.status = nes.getCPU().getStatus().getByte();
+
+    snap.mapperId  = nes.getCartridge().getMapperNumber();
+    snap.prgSizeKB = nes.getCartridge().getPRG().size() / 1024;
+    snap.chrSizeKB = nes.getCartridge().getCHR().size() / 1024;
+
+    if (includeRam) {
+        for (uint16_t addr = 0; addr < 0x0800; ++addr) {
+            snap.cpuRam[addr] = nes.cpuRead(addr);
+        }
+    }
+}
+
 int main()
 {
     // En Linux (GNOME/Wayland), forzar el backend X11 (XWayland) permite que
@@ -263,10 +292,18 @@ int main()
                     std::lock_guard<std::mutex> lock(gui.stateMutex);
                     path = gui.pendingRomPath;
                 }
-                if (!path.empty()) {
-                    nes.loadROM(path);
-                    gui.confirmRomLoaded(path);
+                if (!path.empty() && nes.loadROM(path)) {
+                    nes.reset();
                     SDL_ClearAudioStream(audioStream);
+                    gui.confirmRomLoaded(path);
+
+                    // Limpiar y actualizar inmediatamente el FrameBuffer compartido y el DebugSnapshot
+                    std::lock_guard<std::mutex> lock(frameMutex);
+                    sharedFrameBuffer = nes.getPPU().getFramebuffer();
+                    updateDebugSnapshot(nes, sharedDebugSnapshot, gui.showRAM);
+                    if (gui.showPatternTables) {
+                        extractPatternTables(nes, sharedDebugSnapshot, gui.selectedPatternPalette.load(std::memory_order_relaxed));
+                    }
                     nextFrameTime = Clock::now();
                 }
             }
@@ -287,7 +324,52 @@ int main()
             if (gui.cmdStop.exchange(false)) {
                 std::lock_guard<std::mutex> lock(gui.stateMutex);
                 gui.currentState = NES::GUI::EmulationState::Stopped;
+                gui.linkedSaveStatePath = "";
                 SDL_ClearAudioStream(audioStream);
+            }
+
+            // --- GUARDAR SAVESTATE (.pxsave) ---
+            // Al estar aquí al inicio del bucle del frame, el frame anterior ya terminó por completo
+            // (la PPU y el CPU están en un límite seguro) y NO alteramos gui.currentState:
+            // si estaba Running sigue Running; si estaba Paused sigue Paused.
+            if (gui.cmdSaveState.exchange(false)) {
+                std::string savePath;
+                NES::GUI::EmulationState st;
+                {
+                    std::lock_guard<std::mutex> lock(gui.stateMutex);
+                    savePath = gui.pendingSaveStatePath;
+                    st = gui.currentState;
+                }
+                if (!savePath.empty() &&
+                    (st == NES::GUI::EmulationState::Running || st == NES::GUI::EmulationState::Paused)) {
+                    nes.saveStateToFile(savePath);
+                }
+            }
+
+            // --- CARGAR SAVESTATE (.pxsave) ---
+            if (gui.cmdLoadState.exchange(false)) {
+                std::string loadPath;
+                NES::GUI::EmulationState st;
+                {
+                    std::lock_guard<std::mutex> lock(gui.stateMutex);
+                    loadPath = gui.pendingLoadStatePath;
+                    st = gui.currentState;
+                }
+                if (!loadPath.empty() &&
+                    (st == NES::GUI::EmulationState::Running || st == NES::GUI::EmulationState::Paused)) {
+                    if (nes.loadStateFromFile(loadPath)) {
+                        SDL_ClearAudioStream(audioStream);
+
+                        // Actualizar el FrameBuffer de OpenGL y todas las ventanas de Debug al instante
+                        // (incluso si el emulador está en Pausa):
+                        std::lock_guard<std::mutex> lock(frameMutex);
+                        sharedFrameBuffer = nes.getPPU().getFramebuffer();
+                        updateDebugSnapshot(nes, sharedDebugSnapshot, gui.showRAM);
+                        if (gui.showPatternTables) {
+                            extractPatternTables(nes, sharedDebugSnapshot, gui.selectedPatternPalette.load(std::memory_order_relaxed));
+                        }
+                    }
+                }
             }
 
             if (gui.cmdReset.exchange(false)) {
@@ -489,8 +571,36 @@ int main()
                 atomicControllerState.store(currentButtons, std::memory_order_relaxed);
 
                 if (isPressed && !event.key.repeat) {
-                    if (key == SDLK_P) gui.cmdTogglePause = true;
-                    if (key == SDLK_F) gui.cmdStepFrame   = true;
+                    if (key == SDLK_P)  gui.cmdTogglePause = true;
+                    if (key == SDLK_F)  gui.cmdStepFrame   = true;
+                    if (key == SDLK_F5) {
+                        if (event.key.mod & SDL_KMOD_SHIFT)
+                            gui.openSaveStateAsDialog(window);
+                        else
+                            gui.triggerSaveState(window);
+                    }
+                    if (key == SDLK_F9) {
+                        if (event.key.mod & SDL_KMOD_SHIFT)
+                            gui.openLoadStateDialog(window);
+                        else
+                            gui.triggerLoadLastSaveState();
+                    }
+
+                    if ((event.key.mod & SDL_KMOD_CTRL) && key == SDLK_O) {
+                        gui.openNativeFileDialog(window);
+                    }
+
+                    if ((event.key.mod & SDL_KMOD_CTRL) && key == SDLK_R) {
+                        NES::GUI::EmulationState st;
+                        {
+                            std::lock_guard<std::mutex> lock(gui.stateMutex);
+                            st = gui.currentState;
+                        }
+                        // Solo permite reiniciar si el emulador está corriendo o en pausa
+                        if (st == NES::GUI::EmulationState::Running || st == NES::GUI::EmulationState::Paused) {
+                            gui.cmdReset = true;
+                        }
+                    }
                 }
             }
         }
