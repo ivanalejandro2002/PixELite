@@ -821,6 +821,9 @@ namespace NES::GUI {
                     ImGui::Separator();
                     ImGui::Text("Arquitectura Ricoh 2A03 / PPU 2C02");
                     ImGui::SetWindowFontScale(1.0f);
+                    ImGui::Separator();
+                    ImGui::Text("Creado por: Iván Alejandro Olguín Reyes");
+                    ImGui::SetWindowFontScale(1.0f);
                 }
                 ImGui::End();
             }

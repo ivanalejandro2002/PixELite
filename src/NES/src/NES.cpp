@@ -204,14 +204,14 @@ namespace NES
 
         file << "PALETTE RAM:\n";
 
-        for(uint addr = 0x3F00; addr <= 0x3F0F; ++addr)
+        for(uint32_t addr = 0x3F00; addr <= 0x3F0F; ++addr)
         {
             file << std::hex << std::uppercase << std::setfill('0') << std::setw(2) 
                     << static_cast<int>(ppu.readVRAM(addr)) << " ";
         }
         file << "\n";
 
-        for(uint addr = 0x3F10; addr <= 0x3F1F; ++addr)
+        for(uint32_t addr = 0x3F10; addr <= 0x3F1F; ++addr)
         {
             file << std::hex << std::uppercase << std::setfill('0') << std::setw(2) 
                     << static_cast<int>(ppu.readVRAM(addr)) << " ";
