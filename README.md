@@ -47,6 +47,21 @@ libpipewire-0.3-dev
 
 ---
 
+## 📦 Dependencias Adicionales de Linux (Fedora/ Arch)
+
+Debido al manejador de paquetes, en los casos de Fedora y Arch, se necesitan más dependencias en caso de clonar el proyecto, por el momento no se cuenta con una release específica para estas distribuciones, por lo cual se deberá clonar el Repo con estas dependencias adicionales:
+
+```bash
+sudo dnf install -y gcc-c++ cmake pkgconf-pkg-config libstdc++-static \
+  mesa-libGL-devel mesa-libEGL-devel libX11-devel libXext-devel \
+  libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel \
+  libXScrnSaver-devel wayland-devel wayland-protocols-devel \
+  libxkbcommon-devel alsa-lib-devel pulseaudio-libs-devel pipewire-devel
+```
+
+---
+
+
 ## 📥 Clonación e Instalación del Repositorio
 
 Para clonar el repositorio es necesario seguir una serie de pasos importantes, asegurándote de descargar de forma recursiva los submódulos externos del proyecto (`imgui` y `SDL3`):
