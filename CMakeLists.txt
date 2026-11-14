@@ -11,7 +11,9 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 # Soporte UTF-8 en MSVC (Windows) para acentos y caracteres en español
 if(MSVC)
-    add_compile_options(/utf-8)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    add_compile_options(/utf-8 /EHsc)
+    add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS uint=unsigned)
 endif()
 
 # =========================================

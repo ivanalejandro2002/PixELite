@@ -212,11 +212,35 @@ int main()
     }
 
     SDL_GLContext glContext = SDL_GL_CreateContext(window);
+    if (!glContext) {
+        // Fallback para drivers de Windows que requieren perfil de compatibilidad:
+        SDL_GL_ResetAttributes();
+        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+        glContext = SDL_GL_CreateContext(window);
+    }
+
+    if (!glContext) {
+        SDL_ShowSimpleMessageBox(
+            SDL_MESSAGEBOX_ERROR,
+            "Error de OpenGL",
+            SDL_GetError(),
+            window
+        );
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
     SDL_GL_MakeCurrent(window, glContext);
     SDL_GL_SetSwapInterval(1); // VSync para el hilo de UI/Render
 
     if (!gladLoadGL(reinterpret_cast<GLADloadfunc>(SDL_GL_GetProcAddress))) {
-        std::cerr << "Error al inicializar GLAD\n";
+        SDL_ShowSimpleMessageBox(
+            SDL_MESSAGEBOX_ERROR,
+            "Error en GLAD",
+            "No se pudieron cargar las funciones de OpenGL.",
+            window
+        );
         return 1;
     }
 
