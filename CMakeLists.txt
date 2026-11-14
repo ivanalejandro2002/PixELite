@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 
+# Definir política y runtime estático ANTES de project(TT) para que SDL3, ImGui y TT usen el mismo Heap:
+cmake_policy(SET CMP0091 NEW)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 project(TT)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -11,9 +15,9 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 # Soporte UTF-8 en MSVC (Windows) para acentos y caracteres en español
 if(MSVC)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     add_compile_options(/utf-8 /EHsc)
     add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS uint=unsigned)
+    add_link_options(/STACK:8388608)
 endif()
 
 # =========================================
