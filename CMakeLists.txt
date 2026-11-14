@@ -72,6 +72,16 @@ target_include_directories(imgui PUBLIC
     external/SDL/include
 )
 
+target_compile_definitions(imgui PUBLIC
+    IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+)
+
+if(MSVC)
+    target_compile_options(imgui PUBLIC "/FIglad/gl.h")
+else()
+    target_compile_options(imgui PUBLIC "-include" "glad/gl.h")
+endif()
+
 # =========================================
 # Link ImGui Dependencies
 # =========================================
