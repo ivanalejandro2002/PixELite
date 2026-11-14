@@ -200,11 +200,15 @@ namespace NES
             prgRom.resize(prgSize);
             file.read(reinterpret_cast<char*>(prgRom.data()), prgSize);
 
-            std::filesystem::path rootPath(PROJECT_ROOT_DIR);
+            std::error_code ec;
+            std::filesystem::path rootPath = std::filesystem::current_path(ec);
+            if (ec) {
+                rootPath = std::filesystem::path(".");
+            }
 
             std::filesystem::path realPath = rootPath / "debugs" / "PRGROM.out";
 
-            std::filesystem::create_directories(realPath.parent_path()); 
+            std::filesystem::create_directories(realPath.parent_path(), ec); 
             
             std::ofstream fout(realPath);
             for(int i = 0; i < prgSize; ++i)

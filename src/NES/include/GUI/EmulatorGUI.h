@@ -130,8 +130,53 @@ namespace NES::GUI {
             }
         }
 
+        // Bandera para saber si hay un diálogo del sistema abierto y recordar si el juego estaba corriendo
+        std::atomic<bool> isNativeDialogOpen{false};
+        EmulationState stateBeforeDialog = EmulationState::NoROM;
+
+        // Obtiene el directorio base seguro (carpeta del ejecutable o carpeta actual verificada)
+        static std::string getExecutableBaseDir() {
+            const char* base = SDL_GetBasePath();
+            std::error_code ec;
+            if (base) {
+                std::filesystem::path p(base);
+                if (std::filesystem::exists(p, ec) && std::filesystem::is_directory(p, ec)) {
+                    return p.string();
+                }
+            }
+            std::filesystem::path cwd = std::filesystem::current_path(ec);
+            if (!ec && std::filesystem::exists(cwd, ec)) {
+                return cwd.string() + "/";
+            }
+            return "./";
+        }
+
+        // Verifica que una carpeta exista realmente en este equipo; si no, hace fallback seguro
+        static std::string ensureValidDirectory(const std::string& candidateDir, bool createIfMissing = false) {
+            std::error_code ec;
+            if (!candidateDir.empty()) {
+                std::filesystem::path p(candidateDir);
+                if (createIfMissing) {
+                    std::filesystem::create_directories(p, ec);
+                }
+                if (std::filesystem::exists(p, ec) && std::filesystem::is_directory(p, ec)) {
+                    std::filesystem::path absPath = std::filesystem::weakly_canonical(p, ec);
+                    std::string res = (!ec && !absPath.empty()) ? absPath.string() : p.string();
+                    if (!res.empty() && res.back() != '/' && res.back() != '\\') {
+                        res += "/";
+                    }
+                    return res;
+                }
+            }
+            return getExecutableBaseDir();
+        }
+
         // Llamado por el diálogo nativo de SDL3 o al elegir una ROM
         void requestLoadRom(const std::string& path) {
+            std::error_code ec;
+            if (path.empty() || !std::filesystem::exists(path, ec) || std::filesystem::is_directory(path, ec)) {
+                return;
+            }
             std::lock_guard<std::mutex> lock(stateMutex);
             pendingRomPath = path;
             cmdLoadRom = true;
@@ -140,24 +185,33 @@ namespace NES::GUI {
         // Llamado desde el hilo de emulación cuando la ROM carga con éxito
         void confirmRomLoaded(const std::string& filepath) {
             std::lock_guard<std::mutex> lock(stateMutex);
-            std::filesystem::path p = std::filesystem::absolute(filepath);
+            std::error_code ec;
+            std::filesystem::path p = std::filesystem::absolute(filepath, ec);
+            if (ec) p = std::filesystem::path(filepath);
+
             currentRomPath = p.string();
             currentRomName = p.stem().string(); // Nombre limpio sin ".nes"
             currentState   = EmulationState::Running;
 
-            // Guardar EXCLUSIVAMENTE la última dirección donde se cargó una ROM (con '/' final)
+            // Guardar EXCLUSIVAMENTE la última dirección válida donde se cargó una ROM
             if (p.has_parent_path()) {
-                romDirectory = p.parent_path().string() + "/";
+                romDirectory = ensureValidDirectory(p.parent_path().string(), false);
             }
 
-            // Desvincular el archivo .pxsave individual para no sobrescribir el de otro juego,
-            // pero manteniendo intacto saveStateDirectory (la carpeta del último .pxsave)
             linkedSaveStatePath = "";
 
             auto it = std::find(recentRoms.begin(), recentRoms.end(), currentRomPath);
             if (it != recentRoms.end()) recentRoms.erase(it);
             recentRoms.insert(recentRoms.begin(), currentRomPath);
             if (recentRoms.size() > 8) recentRoms.resize(8);
+        }
+
+        // Si la carga de la nueva ROM falla, restauramos el estado anterior para no matar la sesión actual
+        void cancelOrRestorePreviousState() {
+            std::lock_guard<std::mutex> lock(stateMutex);
+            if (currentState == EmulationState::Paused && stateBeforeDialog == EmulationState::Running && !currentRomPath.empty()) {
+                currentState = EmulationState::Running;
+            }
         }
 
         ViewportRect getAvailableOpenGLViewport(int windowWidth, int windowHeight) const {
@@ -188,39 +242,59 @@ namespace NES::GUI {
             return true;
         }
 
-        // Callback estático para SDL3_ShowOpenFileDialog (Cargar ROM)
+        // Callback estático para SDL_ShowOpenFileDialog (Cargar ROM)
         static void SDLCALL onFileDialogCallback(void* userdata, const char* const* filelist, int filter) {
             (void)filter;
-            if (!filelist || !filelist[0]) return;
             auto* gui = static_cast<EmulatorGUI*>(userdata);
+            gui->isNativeDialogOpen.store(false);
 
-            std::filesystem::path chosenRom = std::filesystem::absolute(filelist[0]);
+            // Si el usuario cerró la ventana o presionó "Cancelar", reanudamos la ROM actual:
+            if (!filelist || !filelist[0] || std::string(filelist[0]).empty()) {
+                gui->cancelOrRestorePreviousState();
+                return;
+            }
+
+            std::error_code ec;
+            std::filesystem::path chosenRom = std::filesystem::absolute(filelist[0], ec);
+            if (ec || !std::filesystem::exists(chosenRom, ec)) {
+                gui->cancelOrRestorePreviousState();
+                return;
+            }
+
             {
                 std::lock_guard<std::mutex> lock(gui->stateMutex);
                 if (chosenRom.has_parent_path()) {
-                    gui->romDirectory = chosenRom.parent_path().string() + "/";
+                    gui->romDirectory = ensureValidDirectory(chosenRom.parent_path().string(), false);
                 }
             }
             gui->requestLoadRom(chosenRom.string());
         }
 
         void openNativeFileDialog(SDL_Window* window) {
+            (void)window;
             static const SDL_DialogFileFilter filters[] = {
                 { "Archivos NES ROM (.nes)", "nes" },
                 { "Todos los archivos", "*" }
             };
-            // Buffer estático persistente para que el hilo asíncrono de SDL3 siempre abra romDirectory
             static std::string persistentRomDir;
+            const char* defaultLocation = nullptr;
+
             {
                 std::lock_guard<std::mutex> lock(stateMutex);
-                if (romDirectory.empty()) {
-                    romDirectory = std::filesystem::current_path().string() + "/";
-                } else if (romDirectory.back() != '/' && romDirectory.back() != '\\') {
-                    romDirectory += "/";
+                stateBeforeDialog = currentState;
+                if (currentState == EmulationState::Running) {
+                    currentState = EmulationState::Paused;
                 }
-                persistentRomDir = romDirectory;
+
+                // Si ya cargaste una ROM antes en esta sesión, usamos su carpeta;
+                // si es la primera vez (romDirectory está vacío), dejamos defaultLocation = nullptr
+                if (!romDirectory.empty()) {
+                    persistentRomDir = ensureValidDirectory(romDirectory, false);
+                    defaultLocation = persistentRomDir.c_str();
+                }
             }
-            SDL_ShowOpenFileDialog(onFileDialogCallback, this, window, filters, 2, persistentRomDir.c_str(), false);
+            isNativeDialogOpen.store(true);
+            SDL_ShowOpenFileDialog(onFileDialogCallback, this, nullptr, filters, 2, defaultLocation, false);
         }
 
         void render(SDL_Window* window, const DebugSnapshot& snap) {
@@ -231,9 +305,9 @@ namespace NES::GUI {
             renderDebugWindows(snap);
         }
 
-        // --- NUEVOS MIEMBROS EN public: DE EmulatorGUI ---
-        std::string romDirectory = std::filesystem::current_path().string() + "/";
-        std::string saveStateDirectory = (std::filesystem::current_path() / "savestates").string();
+        // --- MIEMBROS DE DIRECTORIOS SEGUROS ---
+        std::string romDirectory = "";
+        std::string saveStateDirectory = ensureValidDirectory(getExecutableBaseDir() + "savestates", true);
         std::string linkedSaveStatePath = "";
 
         std::atomic<bool> cmdSaveState{false};
@@ -241,65 +315,81 @@ namespace NES::GUI {
         std::string pendingSaveStatePath = "";
         std::string pendingLoadStatePath = "";
 
-        // Genera el nombre inicial: <NombreROM>.pxsave o <NombreROM>_n.pxsave
-        // buscando el menor n >= 1 que no colisione en el directorio elegido
         std::string generateDefaultSaveStatePath() {
-            std::filesystem::path dir = saveStateDirectory.empty()
-                ? (std::filesystem::current_path() / "savestates")
-                : std::filesystem::absolute(saveStateDirectory);
-
-            // Crear la carpeta de savestates si aún no existe para que el diálogo del SO no falle
-            std::error_code ec;
-            std::filesystem::create_directories(dir, ec);
+            std::string validSaveDir = ensureValidDirectory(saveStateDirectory, true);
+            std::filesystem::path dir(validSaveDir);
 
             std::string baseName = (currentRomName.empty() || currentRomName == "No cargada")
                 ? "savestate"
                 : currentRomName;
 
+            std::error_code ec;
             std::filesystem::path candidate = dir / (baseName + ".pxsave");
-            if (!std::filesystem::exists(candidate)) {
+            if (!std::filesystem::exists(candidate, ec)) {
                 return candidate.string();
             }
 
             int n = 1;
-            while (true) {
+            while (n < 10000) {
                 std::filesystem::path numbered = dir / (baseName + "_" + std::to_string(n) + ".pxsave");
-                if (!std::filesystem::exists(numbered)) {
+                if (!std::filesystem::exists(numbered, ec)) {
                     return numbered.string();
                 }
                 ++n;
             }
+            return candidate.string();
         }
 
         // Callback para "Escoger dirección de ROM" (Carpeta de Savestates)
         static void SDLCALL onFolderDialogCallback(void* userdata, const char* const* filelist, int filter) {
             (void)filter;
-            if (!filelist || !filelist[0]) return;
             auto* gui = static_cast<EmulatorGUI*>(userdata);
+            gui->isNativeDialogOpen.store(false);
+
+            if (!filelist || !filelist[0] || std::string(filelist[0]).empty()) {
+                gui->cancelOrRestorePreviousState();
+                return;
+            }
+
             std::lock_guard<std::mutex> lock(gui->stateMutex);
-            gui->saveStateDirectory = std::filesystem::absolute(filelist[0]).string();
+            gui->saveStateDirectory = ensureValidDirectory(filelist[0], true);
             gui->linkedSaveStatePath = "";
-            std::cout << "[GUI] Directorio exclusivo de savestates: " << gui->saveStateDirectory << "\n";
+            if (gui->currentState == EmulationState::Paused && gui->stateBeforeDialog == EmulationState::Running && !gui->currentRomPath.empty()) {
+                gui->currentState = EmulationState::Running;
+            }
         }
 
         void openSelectSaveDirectoryDialog(SDL_Window* window) {
+            (void)window;
             static std::string persistentFolderDir;
             {
                 std::lock_guard<std::mutex> lock(stateMutex);
-                std::error_code ec;
-                std::filesystem::create_directories(saveStateDirectory, ec);
-                persistentFolderDir = std::filesystem::absolute(saveStateDirectory).string() + "/";
+                stateBeforeDialog = currentState;
+                if (currentState == EmulationState::Running) {
+                    currentState = EmulationState::Paused;
+                }
+                saveStateDirectory = ensureValidDirectory(saveStateDirectory, true);
+                persistentFolderDir = saveStateDirectory;
             }
-            SDL_ShowOpenFolderDialog(onFolderDialogCallback, this, window, persistentFolderDir.c_str(), false);
+            isNativeDialogOpen.store(true);
+            SDL_ShowOpenFolderDialog(onFolderDialogCallback, this, nullptr, persistentFolderDir.c_str(), false);
         }
 
         // Callback para "Guardar Estado Como..." (.pxsave)
         static void SDLCALL onSaveStateDialogCallback(void* userdata, const char* const* filelist, int filter) {
             (void)filter;
-            if (!filelist || !filelist[0]) return;
             auto* gui = static_cast<EmulatorGUI*>(userdata);
+            gui->isNativeDialogOpen.store(false);
 
-            std::filesystem::path chosenPath = std::filesystem::absolute(filelist[0]);
+            if (!filelist || !filelist[0] || std::string(filelist[0]).empty()) {
+                gui->cancelOrRestorePreviousState();
+                return;
+            }
+
+            std::error_code ec;
+            std::filesystem::path chosenPath = std::filesystem::absolute(filelist[0], ec);
+            if (ec) chosenPath = std::filesystem::path(filelist[0]);
+
             if (chosenPath.extension() != ".pxsave") {
                 chosenPath += ".pxsave";
             }
@@ -307,46 +397,49 @@ namespace NES::GUI {
             std::lock_guard<std::mutex> lock(gui->stateMutex);
             gui->linkedSaveStatePath  = chosenPath.string();
             gui->pendingSaveStatePath = chosenPath.string();
-            // Guardar siempre la carpeta donde se guardó este último .pxsave
             if (chosenPath.has_parent_path()) {
-                gui->saveStateDirectory = chosenPath.parent_path().string();
+                gui->saveStateDirectory = ensureValidDirectory(chosenPath.parent_path().string(), true);
+            }
+            if (gui->currentState == EmulationState::Paused && gui->stateBeforeDialog == EmulationState::Running) {
+                gui->currentState = EmulationState::Running;
             }
             gui->cmdSaveState = true;
         }
 
         void openSaveStateAsDialog(SDL_Window* window) {
+            (void)window;
             static const SDL_DialogFileFilter filters[] = {
                 { "PixELite Save State (.pxsave)", "pxsave" },
                 { "Todos los archivos", "*" }
             };
 
-            // Importante: static std::string mantiene vivo el buffer const char*
-            // mientras el hilo asíncrono de SDL3 abre la ventana del sistema operativo:
             static std::string persistentDefaultPath;
             {
                 std::lock_guard<std::mutex> lock(stateMutex);
+                stateBeforeDialog = currentState;
+                if (currentState == EmulationState::Running) {
+                    currentState = EmulationState::Paused;
+                }
                 persistentDefaultPath = generateDefaultSaveStatePath();
             }
 
+            isNativeDialogOpen.store(true);
             SDL_ShowSaveFileDialog(
                 onSaveStateDialogCallback,
                 this,
-                window,
+                nullptr,
                 filters,
                 2,
                 persistentDefaultPath.c_str()
             );
         }
 
-        // Lógica de "Guardar Estado" (F5):
-        // Si ya hay un archivo .pxsave vinculado, lo sobrescribe directamente.
-        // Si no se ha guardado antes, abre "Guardar Estado Como..." con el placeholder <ROM>[_n].pxsave
         void triggerSaveState(SDL_Window* window) {
             bool hasLinked = false;
             {
                 std::lock_guard<std::mutex> lock(stateMutex);
                 if (currentState != EmulationState::Running && currentState != EmulationState::Paused) {
-                    return; // No permitir si no hay ROM o está detenido
+                    return;
                 }
                 if (!linkedSaveStatePath.empty()) {
                     pendingSaveStatePath = linkedSaveStatePath;
@@ -363,21 +456,35 @@ namespace NES::GUI {
         // Callback para "Cargar Estado..." (.pxsave)
         static void SDLCALL onLoadStateDialogCallback(void* userdata, const char* const* filelist, int filter) {
             (void)filter;
-            if (!filelist || !filelist[0]) return;
             auto* gui = static_cast<EmulatorGUI*>(userdata);
+            gui->isNativeDialogOpen.store(false);
 
-            std::filesystem::path chosenPath = std::filesystem::absolute(filelist[0]);
+            if (!filelist || !filelist[0] || std::string(filelist[0]).empty()) {
+                gui->cancelOrRestorePreviousState();
+                return;
+            }
+
+            std::error_code ec;
+            std::filesystem::path chosenPath = std::filesystem::absolute(filelist[0], ec);
+            if (ec || !std::filesystem::exists(chosenPath, ec)) {
+                gui->cancelOrRestorePreviousState();
+                return;
+            }
+
             std::lock_guard<std::mutex> lock(gui->stateMutex);
             gui->linkedSaveStatePath  = chosenPath.string();
             gui->pendingLoadStatePath = chosenPath.string();
-            // También recordar la carpeta al cargar un .pxsave
             if (chosenPath.has_parent_path()) {
-                gui->saveStateDirectory = chosenPath.parent_path().string();
+                gui->saveStateDirectory = ensureValidDirectory(chosenPath.parent_path().string(), true);
+            }
+            if (gui->currentState == EmulationState::Paused && gui->stateBeforeDialog == EmulationState::Running) {
+                gui->currentState = EmulationState::Running;
             }
             gui->cmdLoadState = true;
         }
 
         void openLoadStateDialog(SDL_Window* window) {
+            (void)window;
             static const SDL_DialogFileFilter filters[] = {
                 { "PixELite Save State (.pxsave)", "pxsave" },
                 { "Todos los archivos", "*" }
@@ -385,11 +492,15 @@ namespace NES::GUI {
             static std::string persistentLoadFolder;
             {
                 std::lock_guard<std::mutex> lock(stateMutex);
-                std::error_code ec;
-                std::filesystem::create_directories(saveStateDirectory, ec);
-                persistentLoadFolder = saveStateDirectory + "/";
+                stateBeforeDialog = currentState;
+                if (currentState == EmulationState::Running) {
+                    currentState = EmulationState::Paused;
+                }
+                saveStateDirectory = ensureValidDirectory(saveStateDirectory, true);
+                persistentLoadFolder = saveStateDirectory;
             }
-            SDL_ShowOpenFileDialog(onLoadStateDialogCallback, this, window, filters, 2, persistentLoadFolder.c_str(), false);
+            isNativeDialogOpen.store(true);
+            SDL_ShowOpenFileDialog(onLoadStateDialogCallback, this, nullptr, filters, 2, persistentLoadFolder.c_str(), false);
         }
 
         void triggerLoadLastSaveState() {
@@ -397,7 +508,8 @@ namespace NES::GUI {
             if (currentState != EmulationState::Running && currentState != EmulationState::Paused) {
                 return;
             }
-            if (!linkedSaveStatePath.empty() && std::filesystem::exists(linkedSaveStatePath)) {
+            std::error_code ec;
+            if (!linkedSaveStatePath.empty() && std::filesystem::exists(linkedSaveStatePath, ec)) {
                 pendingLoadStatePath = linkedSaveStatePath;
                 cmdLoadState = true;
             }

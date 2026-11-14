@@ -310,7 +310,6 @@ int main()
                     SDL_ClearAudioStream(audioStream);
                     gui.confirmRomLoaded(path);
 
-                    // Limpiar y actualizar inmediatamente el FrameBuffer compartido y el DebugSnapshot
                     std::lock_guard<std::mutex> lock(frameMutex);
                     sharedFrameBuffer = nes.getPPU().getFramebuffer();
                     updateDebugSnapshot(nes, sharedDebugSnapshot, gui.showRAM);
@@ -318,6 +317,9 @@ int main()
                         extractPatternTables(nes, sharedDebugSnapshot, gui.selectedPatternPalette.load(std::memory_order_relaxed));
                     }
                     nextFrameTime = Clock::now();
+                } else {
+                    // Si la carga falló, reanudamos la ROM que ya estaba corriendo
+                    gui.cancelOrRestorePreviousState();
                 }
             }
 
@@ -549,12 +551,16 @@ int main()
             ImGui_ImplSDL3_ProcessEvent(&event);
 
             if (event.type == SDL_EVENT_QUIT) {
-                appRunning = false;
+                if (!gui.isNativeDialogOpen.load()) {
+                    appRunning = false;
+                }
             }
 
             if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
                 event.window.windowID == SDL_GetWindowID(window)) {
-                appRunning = false;
+                if (!gui.isNativeDialogOpen.load()) {
+                    appRunning = false;
+                }
             }
 
             if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
@@ -666,21 +672,6 @@ int main()
         glDisable(GL_SCISSOR_TEST);
 
         // 4. Restaurar viewport completo y pintar las barras de ImGui encima del marco
-        glViewport(0, 0, winW, winH);
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-        #ifdef ImGuiConfigFlags_ViewportsEnable
-        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-            SDL_Window* backupWin = SDL_GL_GetCurrentWindow();
-            SDL_GLContext backupCtx = SDL_GL_GetCurrentContext();
-            ImGui::UpdatePlatformWindows();
-            ImGui::RenderPlatformWindowsDefault();
-            SDL_GL_MakeCurrent(backupWin, backupCtx);
-        }
-        #endif
-
-        // Restaurar viewport completo y pintar las barras de ImGui encima del marco
         glViewport(0, 0, winW, winH);
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

@@ -154,7 +154,11 @@ namespace NES
 
     void NES::memoryDebug()
     {
-        std::filesystem::path rootPath(PROJECT_ROOT_DIR);
+        std::error_code ec;
+        std::filesystem::path rootPath = std::filesystem::current_path(ec);
+        if (ec) {
+            rootPath = std::filesystem::path(".");
+        }
 
         std::filesystem::path realPath = rootPath / "debugs" / "ROMTest.out";
 
