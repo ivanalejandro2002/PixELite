@@ -48,7 +48,7 @@ namespace NES
             }
 
             void saveState(std::ostream& out) const;
-            void loadState(std::istream& in);
+            void loadState(std::istream& in, uint32_t version = 2);
 
         private:
             PulseChannel pulse1{true};

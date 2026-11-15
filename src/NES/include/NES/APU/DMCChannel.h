@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <NES/SaveStateStream.h>
 
 namespace NES
 {
@@ -34,6 +35,9 @@ namespace NES
 
             uint16_t getBytesRemaining() const;
             Bus& getBusReference();
+
+            void saveState(std::ostream& out) const;
+            void loadState(std::istream& in);
 
         private:
             Bus &busReference;

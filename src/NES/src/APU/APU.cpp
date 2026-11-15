@@ -396,6 +396,7 @@ namespace NES
         SaveStateStream::writeVal(out, pulse2);
         SaveStateStream::writeVal(out, triangle);
         SaveStateStream::writeVal(out, noise);
+        dmc.saveState(out);
 
         // Estado del Frame Counter y registros generales de la APU
         SaveStateStream::writeVal(out, statusRegister);
@@ -410,12 +411,15 @@ namespace NES
         SaveStateStream::writeVal(out, frameCounterResetDelay);
     }
 
-    void APU::loadState(std::istream& in)
+    void APU::loadState(std::istream& in, uint32_t version)
     {
         SaveStateStream::readVal(in, pulse1);
         SaveStateStream::readVal(in, pulse2);
         SaveStateStream::readVal(in, triangle);
         SaveStateStream::readVal(in, noise);
+        if (version >= 2) {
+            dmc.loadState(in);
+        }
 
         SaveStateStream::readVal(in, statusRegister);
         SaveStateStream::readVal(in, cpuCycleCount);

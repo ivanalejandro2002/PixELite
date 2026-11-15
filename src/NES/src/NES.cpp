@@ -441,10 +441,10 @@ namespace NES
             return false;
         }
 
-        // 1. Cabecera mágica (.pxsave) y Mapper ID para validar compatibilidad
+        // 1. Cabecera mágica (.pxsave) versión 2 (sin FrameBuffer pesado)
         const char magic[4] = {'P', 'X', 'S', 'V'};
         out.write(magic, 4);
-        uint32_t version = 1;
+        uint32_t version = 2;
         uint16_t mapperId = cartridge.getMapperNumber();
         SaveStateStream::writeVal(out, version);
         SaveStateStream::writeVal(out, mapperId);
@@ -487,16 +487,15 @@ namespace NES
 
         if (mapperId != cartridge.getMapperNumber()) {
             std::cerr << "[NES] El savestate pertenece a otro Mapper (" << mapperId
-                    << " vs " << cartridge.getMapperNumber() << ").\n";
+                      << " vs " << cartridge.getMapperNumber() << ").\n";
             return false;
         }
 
         SaveStateStream::readVal(in, masterClock);
         cpu.loadState(in);
-        ppu.loadState(in);
-        apu.loadState(in);
+        ppu.loadState(in, version);
+        apu.loadState(in, version);
         mainBus.loadState(in);
-
         ram.loadState(in);
         cartridge.loadState(in);
 

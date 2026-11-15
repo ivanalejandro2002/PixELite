@@ -1159,12 +1159,101 @@ namespace NES
         SaveStateStream::writeVal(out, suppressVBlankFlag);
         SaveStateStream::writeVal(out, nmiDelay);
 
-        // Guardar el FrameBuffer actual (256x240 RGBA) para que al cargar en Pausa
-        // la imagen de OpenGL se actualice instantáneamente:
-        SaveStateStream::writeVal(out, frameBuffer);
+        // Helper para aplicar cualquiera de las 8 combinaciones de énfasis (0..7)
+        auto computeEmphasisRGB = [&](uint8_t colorIdx, uint8_t empBits) -> std::array<uint8_t, 3> {
+            constexpr float attenuation = 0.8f;
+            const bool empR = (empBits & 0x01) != 0;
+            const bool empG = (empBits & 0x02) != 0;
+            const bool empB = (empBits & 0x04) != 0;
+
+            auto res = nesPalette[colorIdx & 0x3F];
+            if (empR || empG || empB) {
+                if (!empR || (empG && empB)) res[0] = static_cast<uint8_t>(res[0] * attenuation);
+                if (!empG || (empR && empB)) res[1] = static_cast<uint8_t>(res[1] * attenuation);
+                if (!empB || (empR && empG)) res[2] = static_cast<uint8_t>(res[2] * attenuation);
+            }
+            return res;
+        };
+
+        // Precalcular tabla de las 8 variantes de énfasis x 64 colores
+        std::array<std::array<std::array<uint8_t, 3>, 64>, 8> allPalettes{};
+        for (uint8_t e = 0; e < 8; ++e) {
+            for (uint8_t c = 0; c < 64; ++c) {
+                allPalettes[e][c] = computeEmphasisRGB(c, e);
+            }
+        }
+
+        uint8_t activeEmp = (PPUMASK >> 5) & 0x07;
+        // Guardar el énfasis inicial con el que arranca el frame (1 byte)
+        SaveStateStream::writeVal(out, activeEmp);
+
+        auto findColorAndEmphasis = [&](uint8_t r, uint8_t g, uint8_t b, uint8_t& ioEmp) -> uint8_t {
+            // 1. Buscar primero en el énfasis activo actual (99.9% de los casos)
+            for (uint8_t c = 0; c < 64; ++c) {
+                if (allPalettes[ioEmp][c][0] == r &&
+                    allPalettes[ioEmp][c][1] == g &&
+                    allPalettes[ioEmp][c][2] == b) {
+                    return c;
+                }
+            }
+            // 2. Si el juego cambió el énfasis a media pantalla, buscar en los otros 7 modos:
+            for (uint8_t e = 0; e < 8; ++e) {
+                if (e == ioEmp) continue;
+                for (uint8_t c = 0; c < 64; ++c) {
+                    if (allPalettes[e][c][0] == r &&
+                        allPalettes[e][c][1] == g &&
+                        allPalettes[e][c][2] == b) {
+                        ioEmp = e;
+                        return c;
+                    }
+                }
+            }
+            return 0x0F;
+        };
+
+        const auto& pixels = frameBuffer.getPixels();
+        constexpr size_t totalPixels = NES::Graphics::FrameBuffer::Width * NES::Graphics::FrameBuffer::Height;
+        size_t i = 0;
+        while (i < totalPixels) {
+            uint8_t r = pixels[i * 4 + 0];
+            uint8_t g = pixels[i * 4 + 1];
+            uint8_t b = pixels[i * 4 + 2];
+
+            uint8_t nextEmp = activeEmp;
+            uint8_t colorIdx = findColorAndEmphasis(r, g, b, nextEmp) & 0x3F;
+
+            // Si detectamos que en este píxel cambió el énfasis respecto al anterior,
+            // emitimos el marcador especial de 2 bytes: [0x00 | nextEmp] + [0xFF]
+            if (nextEmp != activeEmp) {
+                activeEmp = nextEmp;
+                uint8_t empHeader = activeEmp & 0x07; // bits 7..6 en 00
+                uint8_t empMarker = 0xFF;
+                SaveStateStream::writeVal(out, empHeader);
+                SaveStateStream::writeVal(out, empMarker);
+            }
+
+            size_t runLen = 1;
+            while (runLen < 258 && (i + runLen) < totalPixels &&
+                   pixels[(i + runLen) * 4 + 0] == r &&
+                   pixels[(i + runLen) * 4 + 1] == g &&
+                   pixels[(i + runLen) * 4 + 2] == b) {
+                ++runLen;
+            }
+
+            if (runLen <= 3) {
+                uint8_t packed = static_cast<uint8_t>((runLen << 6) | colorIdx);
+                SaveStateStream::writeVal(out, packed);
+            } else {
+                uint8_t header = colorIdx; // bits 7..6 en 00
+                uint8_t extraLen = static_cast<uint8_t>(runLen - 4); // 0..254 (255 está reservado para énfasis)
+                SaveStateStream::writeVal(out, header);
+                SaveStateStream::writeVal(out, extraLen);
+            }
+            i += runLen;
+        }
     }
 
-    void PPU2C02::loadState(std::istream& in)
+    void PPU2C02::loadState(std::istream& in, uint32_t version)
     {
         ciram.loadState(in);
         for (uint16_t addr = 0x3F00; addr <= 0x3F1F; ++addr) {
@@ -1218,8 +1307,59 @@ namespace NES
         SaveStateStream::readVal(in, suppressVBlankFlag);
         SaveStateStream::readVal(in, nmiDelay);
 
-        // Restaurar el FrameBuffer en el estado exacto en que estaba la pantalla:
-        SaveStateStream::readVal(in, frameBuffer);
+        // Retrocompatibilidad: si el archivo es versión 1 (~260 KB),
+        // saltamos los 245,760 bytes del FrameBuffer antiguo para no desfasar a la APU/RAM/Cartucho:
+        if (version == 1) {
+            SaveStateStream::readVal(in, frameBuffer);
+        } else {
+            auto computeEmphasisRGB = [&](uint8_t colorIdx, uint8_t empBits) -> std::array<uint8_t, 3> {
+                constexpr float attenuation = 0.8f;
+                const bool empR = (empBits & 0x01) != 0;
+                const bool empG = (empBits & 0x02) != 0;
+                const bool empB = (empBits & 0x04) != 0;
+
+                auto res = nesPalette[colorIdx & 0x3F];
+                if (empR || empG || empB) {
+                    if (!empR || (empG && empB)) res[0] = static_cast<uint8_t>(res[0] * attenuation);
+                    if (!empG || (empR && empB)) res[1] = static_cast<uint8_t>(res[1] * attenuation);
+                    if (!empB || (empR && empG)) res[2] = static_cast<uint8_t>(res[2] * attenuation);
+                }
+                return res;
+            };
+
+            uint8_t activeEmp = 0;
+            SaveStateStream::readVal(in, activeEmp);
+            activeEmp &= 0x07;
+
+            constexpr size_t totalPixels = NES::Graphics::FrameBuffer::Width * NES::Graphics::FrameBuffer::Height;
+            size_t pixelIdx = 0;
+            while (pixelIdx < totalPixels && in.good()) {
+                uint8_t packed = 0;
+                SaveStateStream::readVal(in, packed);
+                if (!in.good()) break;
+
+                uint8_t colorIdx = packed & 0x3F;
+                size_t runLen = (packed >> 6) & 0x03;
+
+                if (runLen == 0) {
+                    uint8_t extraLen = 0;
+                    SaveStateStream::readVal(in, extraLen);
+                    // Si extraLen == 0xFF, es un cambio de énfasis mid-frame:
+                    if (extraLen == 0xFF) {
+                        activeEmp = colorIdx & 0x07;
+                        continue;
+                    }
+                    runLen = static_cast<size_t>(extraLen) + 4;
+                }
+
+                const auto rgb = computeEmphasisRGB(colorIdx, activeEmp);
+                for (size_t k = 0; k < runLen && pixelIdx < totalPixels; ++k, ++pixelIdx) {
+                    int x = static_cast<int>(pixelIdx % NES::Graphics::FrameBuffer::Width);
+                    int y = static_cast<int>(pixelIdx / NES::Graphics::FrameBuffer::Width);
+                    frameBuffer.setPixel(x, y, rgb[0], rgb[1], rgb[2]);
+                }
+            }
+        }
     }
 
     uint8_t PPU2C02::debugPPUCTRL() const {return PPUCTRL;}

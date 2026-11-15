@@ -279,4 +279,56 @@ namespace NES
 
     uint16_t DMCChannel::getBytesRemaining() const { return bytesRemaining; }
     Bus& DMCChannel::getBusReference() { return busReference; }
+
+    void DMCChannel::saveState(std::ostream& out) const
+    {
+        SaveStateStream::writeVal(out, enabled);
+        SaveStateStream::writeVal(out, irqEnabled);
+        SaveStateStream::writeVal(out, loopFlag);
+        SaveStateStream::writeVal(out, rateIndex);
+        SaveStateStream::writeVal(out, outputLevel);
+        SaveStateStream::writeVal(out, sampleAddressReload);
+        SaveStateStream::writeVal(out, sampleLengthReload);
+        SaveStateStream::writeVal(out, currentAddress);
+        SaveStateStream::writeVal(out, bytesRemaining);
+        SaveStateStream::writeVal(out, sampleBuffer);
+        SaveStateStream::writeVal(out, bufferEmpty);
+        SaveStateStream::writeVal(out, shiftRegister);
+        SaveStateStream::writeVal(out, bitsRemaining);
+        SaveStateStream::writeVal(out, silenceFlag);
+        SaveStateStream::writeVal(out, timerReload);
+        SaveStateStream::writeVal(out, timerCounter);
+        SaveStateStream::writeVal(out, irqFlag);
+        SaveStateStream::writeVal(out, dmaRequested);
+        SaveStateStream::writeVal(out, loadDmaDelay);
+        SaveStateStream::writeVal(out, pendingAbortedDMA);
+        SaveStateStream::writeVal(out, pendingFullReloadDMA);
+        SaveStateStream::writeVal(out, abortedDmaRequested);
+    }
+
+    void DMCChannel::loadState(std::istream& in)
+    {
+        SaveStateStream::readVal(in, enabled);
+        SaveStateStream::readVal(in, irqEnabled);
+        SaveStateStream::readVal(in, loopFlag);
+        SaveStateStream::readVal(in, rateIndex);
+        SaveStateStream::readVal(in, outputLevel);
+        SaveStateStream::readVal(in, sampleAddressReload);
+        SaveStateStream::readVal(in, sampleLengthReload);
+        SaveStateStream::readVal(in, currentAddress);
+        SaveStateStream::readVal(in, bytesRemaining);
+        SaveStateStream::readVal(in, sampleBuffer);
+        SaveStateStream::readVal(in, bufferEmpty);
+        SaveStateStream::readVal(in, shiftRegister);
+        SaveStateStream::readVal(in, bitsRemaining);
+        SaveStateStream::readVal(in, silenceFlag);
+        SaveStateStream::readVal(in, timerReload);
+        SaveStateStream::readVal(in, timerCounter);
+        SaveStateStream::readVal(in, irqFlag);
+        SaveStateStream::readVal(in, dmaRequested);
+        SaveStateStream::readVal(in, loadDmaDelay);
+        SaveStateStream::readVal(in, pendingAbortedDMA);
+        SaveStateStream::readVal(in, pendingFullReloadDMA);
+        SaveStateStream::readVal(in, abortedDmaRequested);
+    }
 }

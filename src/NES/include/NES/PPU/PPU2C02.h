@@ -104,7 +104,7 @@ namespace NES
                 void clearFrameComplete();
 
                 void saveState(std::ostream& out) const;
-                void loadState(std::istream& in);
+                void loadState(std::istream& in, uint32_t version = 2);
 
                 uint8_t debugPPUCTRL() const;
                 uint8_t debugPPUMASK() const;
